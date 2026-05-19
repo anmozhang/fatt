@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#1a1a1a" />
+<title>Inspection Portal</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E📋%3C/text%3E%3C/svg%3E" />
+<link rel="stylesheet" href="assets/css/main.css" />
+<link rel="stylesheet" href="assets/css/landing.css" />
+</head>
+<body class="theme-light">
+<div class="lang-switcher">
+<button class="lang-btn" data-lang="en">EN</button>
+<button class="lang-btn active" data-lang="zh">中文</button>
+</div>
+
+<main class="landing">
+<header class="landing-header">
+<div class="logo-mark">
+<svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect x="6" y="6" width="28" height="28" rx="4" stroke="currentColor" stroke-width="2"/>
+<path d="M14 20L18 24L26 16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+</div>
+<h1 class="landing-title" data-i18n="landing.title">检验门户</h1>
+<p class="landing-subtitle" data-i18n="landing.subtitle">质量检验数字化系统 · 私人内部使用</p>
+</header>
+
+<section class="role-grid">
+<a href="pages/b-team.html?role=b-team" class="role-card role-bteam">
+<div class="role-icon">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+<path d="M3 9l1.5-2.5h15L21 9M3 9v10a1 1 0 001 1h16a1 1 0 001-1V9M3 9h18M9 13h6"/>
+<circle cx="12" cy="14" r="3"/>
+</svg>
+</div>
+<h2 class="role-name" data-i18n="role.bteam.name">B Team</h2>
+<p class="role-desc" data-i18n="role.bteam.desc">现场拍照 · 上传照片 · 记录数据</p>
+<span class="role-arrow">→</span>
+</a>
+
+<a href="pages/qc.html?role=qc" class="role-card role-qc">
+<div class="role-icon">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+<circle cx="11" cy="11" r="7"/>
+<path d="M21 21l-4.5-4.5"/>
+<path d="M8 11h6M11 8v6"/>
+</svg>
+</div>
+<h2 class="role-name" data-i18n="role.qc.name">QC 质检</h2>
+<p class="role-desc" data-i18n="role.qc.desc">审核照片 · 标记缺陷 · 添加备注</p>
+<span class="role-arrow">→</span>
+</a>
+
+<a href="pages/audit.html?role=audit" class="role-card role-audit">
+<div class="role-icon">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+<path d="M9 11l3 3L22 4"/>
+<path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+</svg>
+</div>
+<h2 class="role-name" data-i18n="role.audit.name">Audit 审计</h2>
+<p class="role-desc" data-i18n="role.audit.desc">最终审批 · 生成报告 · 数字签名</p>
+<span class="role-arrow">→</span>
+</a>
+
+<a href="pages/customer.html?role=customer" class="role-card role-customer">
+<div class="role-icon">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+<path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>
+</svg>
+</div>
+<h2 class="role-name" data-i18n="role.customer.name">Customer 客户</h2>
+<p class="role-desc" data-i18n="role.customer.desc">查看报告 · 下载PDF · 评论反馈</p>
+<span class="role-arrow">→</span>
+</a>
+</section>
+
+<footer class="landing-footer">
+<div class="storage-status">
+<span class="status-dot" id="storageStatus"></span>
+<span data-i18n="status.storage">存储状态：</span>
+<span id="storageInfo">Google Drive</span>
+</div>
+<p class="footer-note" data-i18n="landing.footer">v1.0 · 生产质检系统</p>
+</footer>
+</main>
+
+<script src="assets/js/i18n.js"></script>
+<script src="assets/js/storage/storage-adapter.js"></script>
+<script src="assets/js/landing.js"></script>
+</body>
+</html>
