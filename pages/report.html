@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Inspection Report</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E📄%3C/text%3E%3C/svg%3E" />
+<link rel="stylesheet" href="../assets/css/main.css" />
+<link rel="stylesheet" href="../assets/css/report.css" />
+</head>
+<body class="theme-light">
+<div class="lang-switcher no-print">
+<button class="lang-btn" data-lang="en">EN</button>
+<button class="lang-btn active" data-lang="zh">中文</button>
+</div>
+
+<nav class="topbar no-print">
+<div class="topbar-left">
+<a href="javascript:history.back()" class="topbar-back" aria-label="Back">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+<path d="M19 12H5M12 19l-7-7 7-7"/>
+</svg>
+</a>
+<div>
+<div class="topbar-title" data-i18n="report.title">检验报告</div>
+<div class="topbar-subtitle" id="reportSubtitle"></div>
+</div>
+</div>
+<div class="topbar-right">
+<button class="btn btn-sm" onclick="Report.share()">
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+<path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13"/>
+</svg>
+<span data-i18n="report.share_link">分享</span>
+</button>
+<button class="btn btn-sm" onclick="window.print()">
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+<path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z"/>
+</svg>
+<span data-i18n="report.print">打印</span>
+</button>
+<button class="btn btn-sm btn-primary" id="downloadPdfBtn" onclick="Report.downloadPDF()">
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+</svg>
+<span data-i18n="report.download_pdf">下载 PDF</span>
+</button>
+</div>
+</nav>
+
+<main id="reportRoot" class="report-page">
+<div class="loading-screen" id="loadingScreen">
+<div class="spinner"></div>
+<div class="text-secondary mt-3" data-i18n="common.loading">加载中...</div>
+</div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="../assets/js/i18n.js"></script>
+<script src="../assets/js/storage/storage-adapter.js"></script>
+<script src="../assets/js/inspection-core.js"></script>
+<script src="../assets/js/report.js"></script>
+</body>
+</html>
