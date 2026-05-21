@@ -1,0 +1,78 @@
+/* ============================================
+   BTEAM.CSS - B-Team Field Inspector Interface
+   ============================================ */
+
+/* ---- Layout ---- */
+.bteam-app { display: flex; flex-direction: column; min-height: 100vh; }
+.bteam-header { position: sticky; top: 0; z-index: 100; background: #1e1e1e; border-bottom: 1px solid #333; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.bteam-logo { font-size: 1rem; font-weight: 700; color: #4fc3f7; display: flex; align-items: center; gap: 8px; }
+.bteam-logo span { color: #888; font-size: 12px; font-weight: 400; }
+
+/* ---- Session Bar ---- */
+.session-bar { background: #222; border-bottom: 1px solid #2a2a2a; padding: 10px 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 13px; }
+.session-info { color: #888; }
+.session-info strong { color: #e0e0e0; }
+.session-badge { padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; background: rgba(79,195,247,0.1); color: #4fc3f7; }
+
+/* ---- Step Indicators ---- */
+.steps-nav { display: flex; overflow-x: auto; background: #1e1e1e; border-bottom: 1px solid #2a2a2a; padding: 0 4px; scrollbar-width: none; }
+.steps-nav::-webkit-scrollbar { display: none; }
+.step-item { display: flex; align-items: center; gap: 6px; padding: 10px 14px; font-size: 12px; color: #666; white-space: nowrap; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; }
+.step-item:hover { color: #aaa; }
+.step-item.active { color: #4fc3f7; border-bottom-color: #4fc3f7; }
+.step-item.done { color: #66bb6a; }
+.step-num { width: 20px; height: 20px; border-radius: 50%; border: 1px solid currentColor; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; flex-shrink: 0; }
+.step-item.done .step-num { background: #66bb6a; color: #000; border-color: #66bb6a; }
+
+/* ---- Step Content ---- */
+.step-content { flex: 1; overflow-y: auto; padding: 16px; }
+.step-title { font-size: 1rem; font-weight: 700; margin-bottom: 4px; }
+.step-subtitle { font-size: 12px; color: #666; margin-bottom: 16px; }
+
+/* ---- Upload Zone ---- */
+.upload-zone { border: 2px dashed #3a3a3a; border-radius: 12px; padding: 32px 16px; text-align: center; cursor: pointer; transition: all 0.2s; background: rgba(255,255,255,0.02); }
+.upload-zone:hover, .upload-zone.drag-over { border-color: #4fc3f7; background: rgba(79,195,247,0.05); }
+.upload-zone-icon { font-size: 2.5rem; margin-bottom: 12px; opacity: 0.6; }
+.upload-zone-text { font-size: 14px; color: #888; }
+.upload-zone-hint { font-size: 12px; color: #555; margin-top: 6px; }
+
+/* ---- Photo Grid ---- */
+.photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; margin-top: 16px; }
+.photo-item { position: relative; border-radius: 8px; overflow: hidden; aspect-ratio: 1; background: #2a2a2a; border: 1px solid #3a3a3a; }
+.photo-item img { width: 100%; height: 100%; object-fit: cover; }
+.photo-item-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0); display: flex; align-items: flex-end; padding: 6px; transition: background 0.2s; }
+.photo-item:hover .photo-item-overlay { background: rgba(0,0,0,0.5); }
+.photo-remove { display: none; background: rgba(239,83,80,0.9); color: #fff; border: none; border-radius: 4px; padding: 3px 8px; font-size: 11px; cursor: pointer; }
+.photo-item:hover .photo-remove { display: block; }
+
+/* ---- Data Entry Form ---- */
+.data-form { display: flex; flex-direction: column; gap: 14px; }
+.data-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.spec-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.spec-table th { background: #222; color: #888; font-weight: 600; padding: 8px 10px; text-align: left; border-bottom: 1px solid #3a3a3a; }
+.spec-table td { padding: 8px 10px; border-bottom: 1px solid #2a2a2a; }
+.spec-table tr:hover td { background: rgba(255,255,255,0.02); }
+.spec-pass { color: #66bb6a; font-weight: 700; }
+.spec-fail { color: #ef5350; font-weight: 700; }
+
+/* ---- AQL Panel ---- */
+.aql-panel { background: #222; border: 1px solid #333; border-radius: 10px; padding: 14px; }
+.aql-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #2a2a2a; font-size: 13px; }
+.aql-row:last-child { border-bottom: none; }
+.aql-label { color: #888; }
+.aql-value { font-weight: 600; color: #e0e0e0; }
+
+/* ---- Bottom Nav ---- */
+.bottom-nav { position: sticky; bottom: 0; background: #1e1e1e; border-top: 1px solid #333; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.nav-info { font-size: 12px; color: #666; }
+
+/* ---- Status Colors ---- */
+.status-pass { color: #66bb6a; }
+.status-fail { color: #ef5350; }
+.status-pending { color: #ffa726; }
+
+/* ---- Responsive ---- */
+@media (max-width: 480px) {
+  .data-row { grid-template-columns: 1fr; }
+  .photo-grid { grid-template-columns: repeat(3, 1fr); }
+}
