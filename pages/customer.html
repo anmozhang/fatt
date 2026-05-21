@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#1a1a1a" />
+<title data-i18n="customer.title">Customer Portal</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E📋%3C/text%3E%3C/svg%3E" />
+<link rel="stylesheet" href="../assets/css/main.css" />
+<link rel="stylesheet" href="../assets/css/customer.css" />
+</head>
+<body class="theme-light">
+
+<div class="lang-switcher">
+  <button class="lang-btn" data-lang="en">EN</button>
+  <button class="lang-btn active" data-lang="zh">中文</button>
+</div>
+
+<div class="page-header">
+  <div>
+    <a href="../index.html" class="btn btn-ghost btn-sm" style="margin-bottom:8px;">← <span data-i18n="common.back">返回</span></a>
+    <h1 class="page-title" data-i18n="customer.title">Customer Portal</h1>
+    <p class="page-subtitle" data-i18n="customer.subtitle">View your inspection reports</p>
+  </div>
+</div>
+
+<main style="padding:16px;max-width:900px;margin:0 auto;">
+
+  <!-- Tabs -->
+  <div style="display:flex;gap:0;border-bottom:1px solid #333;margin-bottom:20px;">
+    <button class="tab-btn active" data-tab="reports" style="padding:10px 20px;background:none;border:none;border-bottom:2px solid #4fc3f7;color:#4fc3f7;cursor:pointer;font-size:14px;" data-i18n="customer.my_reports">My Reports</button>
+    <button class="tab-btn" data-tab="feedback" style="padding:10px 20px;background:none;border:none;border-bottom:2px solid transparent;color:#888;cursor:pointer;font-size:14px;" data-i18n="customer.feedback">Feedback</button>
+  </div>
+
+  <!-- Reports Tab -->
+  <div id="tab-reports">
+    <div id="reportList" style="display:flex;flex-direction:column;gap:12px;">
+      <div class="empty-state">
+        <div class="empty-state-icon">📋</div>
+        <div class="empty-state-text" data-i18n="msg.no_data">No data</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Feedback Tab -->
+  <div id="tab-feedback" style="display:none;">
+    <div class="card">
+      <div class="form-group">
+        <label class="form-label" data-i18n="qc.add_comment">Add Comment</label>
+        <textarea class="form-control" id="feedbackText" rows="4" data-i18n-placeholder="qc.add_comment"></textarea>
+      </div>
+      <button class="btn btn-primary" onclick="submitFeedback()" data-i18n="common.submit">Submit</button>
+    </div>
+  </div>
+
+</main>
+
+<script src="../assets/js/i18n.js"></script>
+<script src="../assets/js/storage/storage-adapter.js"></script>
+<script>
+// Tab switching
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => {
+      b.style.borderBottomColor = 'transparent';
+      b.style.color = '#888';
+      b.classList.remove('active');
+    });
+    btn.style.borderBottomColor = '#4fc3f7';
+    btn.style.color = '#4fc3f7';
+    btn.classList.add('active');
+    document.querySelectorAll('[id^="tab-"]').forEach(t => t.style.display = 'none');
+    document.getElementById('tab-' + btn.dataset.tab).style.display = 'block';
+  });
+});
+
+// Load reports
+async function loadReports() {
+  if (typeof StorageAdapter === 'undefined') return;
+  const sessions = await StorageAdapter.listSessions();
+  const list = document.getElementById('reportList');
+  if (!sessions || sessions.length === 0) return;
+  list.innerHTML = sessions.map(s => {
+    const data = s.data || {};
+    return `<div class="card" style="cursor:pointer;" onclick="viewReport('${s.key}')">
+      <div style="display:flex;justify-content:space-between;align-items:start;">
+        <div>
+          <div style="font-weight:600;margin-bottom:4px;">${data.productName || s.key}</div>
+          <div style="font-size:12px;color:#888;">${data.factory || ''} · ${data.date || ''}</div>
+        </div>
+        <span class="badge badge-${data.status === 'approved' ? 'success' : 'warning'}" data-i18n="${data.status === 'approved' ? 'audit.approved_count' : 'common.pending'}">${data.status || 'pending'}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function viewReport(sessionId) {
+  window.location.href = 'report.html?session=' + sessionId;
+}
+
+function submitFeedback() {
+  const text = document.getElementById('feedbackText').value;
+  if (!text.trim()) return;
+  alert(window.t ? window.t('msg.saved') : 'Saved');
+  document.getElementById('feedbackText').value = '';
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', loadReports);
+} else { loadReports(); }
+</script>
+</body>
+</html>
