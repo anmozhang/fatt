@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#1a1a1a" />
+<title data-i18n="role.bteam.name">B Team</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E📸%3C/text%3E%3C/svg%3E" />
+<link rel="stylesheet" href="../assets/css/main.css" />
+<link rel="stylesheet" href="../assets/css/bteam.css" />
+</head>
+<body class="theme-light">
+
+<div class="lang-switcher">
+  <button class="lang-btn" data-lang="en">EN</button>
+  <button class="lang-btn active" data-lang="zh">中文</button>
+</div>
+
+<div class="bteam-app">
+
+  <!-- Header -->
+  <header class="bteam-header">
+    <div class="bteam-logo">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M2 12h3M19 12h3M12 2v3M12 19v3"/></svg>
+      <span data-i18n="role.bteam.name">B Team</span>
+      <span data-i18n="role.bteam.desc">现场拍照</span>
+    </div>
+    <a href="../index.html" class="btn btn-ghost btn-sm" data-i18n="common.back">返回</a>
+  </header>
+
+  <!-- Session Bar -->
+  <div class="session-bar">
+    <div class="session-info"><span data-i18n="audit.title">Audit</span>: <strong id="sessionName">--</strong></div>
+    <div class="session-badge" id="sessionBadge">New</div>
+  </div>
+
+  <!-- Steps Nav -->
+  <nav class="steps-nav" id="stepsNav"></nav>
+
+  <!-- Step Content -->
+  <div class="step-content" id="stepContent">
+    <!-- Step 0: New Session -->
+    <div id="step-0">
+      <div class="step-title" data-i18n="msg.session_created">New Inspection</div>
+      <div class="step-subtitle" data-i18n="role.bteam.desc">现场拍照 · 上传照片 · 记录数据</div>
+      <div class="data-form" style="margin-top:16px;">
+        <div class="form-group">
+          <label class="form-label">Product Name</label>
+          <input class="form-control" id="productName" type="text" placeholder="Product name..." />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Factory</label>
+          <input class="form-control" id="factoryName" type="text" placeholder="Factory name..." />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Date</label>
+          <input class="form-control" id="inspectionDate" type="date" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">PO Number</label>
+          <input class="form-control" id="poNumber" type="text" placeholder="PO-..." />
+        </div>
+        <button class="btn btn-primary w-full" onclick="BTeam.createSession()" data-i18n="msg.session_created">Start Inspection</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Nav -->
+  <div class="bottom-nav">
+    <div class="nav-info" id="navInfo">Step 1 of 5</div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-ghost btn-sm" id="prevBtn" onclick="BTeam.prevStep()" data-i18n="common.previous">Previous</button>
+      <button class="btn btn-primary btn-sm" id="nextBtn" onclick="BTeam.nextStep()" data-i18n="common.next">Next</button>
+    </div>
+  </div>
+
+</div>
+
+<script src="../assets/js/i18n.js"></script>
+<script src="../assets/js/storage/storage-adapter.js"></script>
+<script>
+const STEPS = [
+  { key: 'setup', label: '基本信息' },
+  { key: 'photos', label: '拍照上传' },
+  { key: 'measurements', label: '尺寸测量' },
+  { key: 'aql', label: 'AQL检验' },
+  { key: 'submit', label: '提交' }
+];
+
+const BTeam = {
+  currentStep: 0,
+  sessionId: null,
+  sessionData: {},
+
+  init() {
+    this._renderSteps();
+    this._checkExistingSession();
+    // Set default date
+    const dateInput = document.getElementById('inspectionDate');
+    if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
+  },
+
+  _renderSteps() {
+    const nav = document.getElementById('stepsNav');
+    nav.innerHTML = STEPS.map((s, i) => `
+      <div class="step-item ${i === 0 ? 'active' : ''}" data-step="${i}" onclick="BTeam.goToStep(${i})">
+        <span class="step-num">${i + 1}</span>
+        <span>${s.label}</span>
+      </div>
+    `).join('');
+  },
+
+  _checkExistingSession() {
+    const sid = localStorage.getItem('fatt_current_session');
+    if (sid) {
+      this.sessionId = sid;
+      document.getElementById('sessionName').textContent = sid;
+    }
+  },
+
+  createSession() {
+    const name = document.getElementById('productName').value.trim();
+    if (!name) { alert('Please enter product name'); return; }
+    this.sessionId = 'session_' + Date.now();
+    this.sessionData = {
+      productName: name,
+      factory: document.getElementById('factoryName').value,
+      date: document.getElementById('inspectionDate').value,
+      poNumber: document.getElementById('poNumber').value,
+      status: 'in_progress',
+      photos: [],
+      createdAt: Date.now()
+    };
+    localStorage.setItem('fatt_current_session', this.sessionId);
+    document.getElementById('sessionName').textContent = name;
+    if (typeof StorageAdapter !== 'undefined') {
+      StorageAdapter.saveSession(this.sessionId, this.sessionData);
+    }
+    this.goToStep(1);
+  },
+
+  goToStep(step) {
+    if (step < 0 || step >= STEPS.length) return;
+    this.currentStep = step;
+    document.querySelectorAll('.step-item').forEach((el, i) => {
+      el.classList.toggle('active', i === step);
+      if (i < step) el.classList.add('done');
+    });
+    document.getElementById('navInfo').textContent = `Step ${step + 1} of ${STEPS.length}`;
+    document.getElementById('prevBtn').style.opacity = step === 0 ? '0.3' : '1';
+    this._renderStepContent(step);
+  },
+
+  prevStep() { if (this.currentStep > 0) this.goToStep(this.currentStep - 1); },
+  nextStep() { if (this.currentStep < STEPS.length - 1) this.goToStep(this.currentStep + 1); },
+
+  _renderStepContent(step) {
+    const content = document.getElementById('stepContent');
+    const stepKey = STEPS[step].key;
+    if (stepKey === 'photos') {
+      content.innerHTML = `
+        <div class="step-title">上传照片</div>
+        <div class="upload-zone" onclick="document.getElementById('photoInput').click()">
+          <div class="upload-zone-icon">📷</div>
+          <div class="upload-zone-text">点击或拖拽上传照片</div>
+          <div class="upload-zone-hint">支持 JPG, PNG，每张最大 5MB</div>
+        </div>
+        <input type="file" id="photoInput" accept="image/*" multiple style="display:none" onchange="BTeam.handlePhotos(this)" />
+        <div class="photo-grid" id="photoGrid"></div>
+      `;
+    } else if (stepKey === 'submit') {
+      content.innerHTML = `
+        <div class="step-title">提交检验</div>
+        <div class="aql-panel" style="margin-top:16px;">
+          <div class="aql-row"><span class="aql-label">产品</span><span class="aql-value" id="sum-product">-</span></div>
+          <div class="aql-row"><span class="aql-label">工厂</span><span class="aql-value" id="sum-factory">-</span></div>
+          <div class="aql-row"><span class="aql-label">日期</span><span class="aql-value" id="sum-date">-</span></div>
+          <div class="aql-row"><span class="aql-label">PO</span><span class="aql-value" id="sum-po">-</span></div>
+        </div>
+        <button class="btn btn-success w-full" style="margin-top:20px;" onclick="BTeam.submitInspection()" data-i18n="common.submit">提交检验</button>
+      `;
+      if (this.sessionData) {
+        document.getElementById('sum-product').textContent = this.sessionData.productName || '-';
+        document.getElementById('sum-factory').textContent = this.sessionData.factory || '-';
+        document.getElementById('sum-date').textContent = this.sessionData.date || '-';
+        document.getElementById('sum-po').textContent = this.sessionData.poNumber || '-';
+      }
+    } else {
+      content.innerHTML = `<div class="step-title">${STEPS[step].label}</div><p style="color:#666;font-size:13px;margin-top:8px;">此步骤功能开发中...</p>`;
+    }
+  },
+
+  handlePhotos(input) {
+    const files = Array.from(input.files);
+    const grid = document.getElementById('photoGrid');
+    files.forEach((file, idx) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const div = document.createElement('div');
+        div.className = 'photo-item';
+        div.innerHTML = `<img src="${e.target.result}" alt="photo ${idx}" /><div class="photo-item-overlay"><button class="photo-remove" onclick="this.closest('.photo-item').remove()">删除</button></div>`;
+        grid.appendChild(div);
+        if (typeof StorageAdapter !== 'undefined' && this.sessionId) {
+          StorageAdapter.saveImage(this.sessionId, 'photo_' + Date.now(), e.target.result);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  },
+
+  submitInspection() {
+    if (!this.sessionId) { alert('No session!'); return; }
+    this.sessionData.status = 'submitted';
+    this.sessionData.submittedAt = Date.now();
+    if (typeof StorageAdapter !== 'undefined') {
+      StorageAdapter.saveSession(this.sessionId, this.sessionData).then(() => {
+        alert(window.t ? window.t('msg.session_created') : 'Submitted!');
+        window.location.href = '../index.html';
+      });
+    }
+  }
+};
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => BTeam.init());
+} else { BTeam.init(); }
+window.BTeam = BTeam;
+</script>
+</body>
+</html>
