@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#1a1a1a" />
+<title>Audit · Inspection Portal</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9C%85%3C/text%3E%3C/svg%3E" />
+<link rel="stylesheet" href="../assets/css/main.css" />
+<link rel="stylesheet" href="../assets/css/review.css" />
+</head>
+<body class="theme-light">
+<div class="lang-switcher">
+  <button class="lang-btn" data-lang="en">EN</button>
+  <button class="lang-btn active" data-lang="zh">中文</button>
+</div>
+
+<div class="page-container">
+  <header class="page-header">
+    <a href="../index.html" class="back-btn">←</a>
+    <div class="header-content">
+      <h1 class="page-title">Audit</h1>
+      <p class="page-subtitle">Final approval · Generate report · Sign</p>
+    </div>
+    <span class="role-badge role-audit">Audit</span>
+  </header>
+
+  <div id="dashboardView">
+    <div class="stats-bar">
+      <div class="stat-item">
+        <span class="stat-label">Pending Audit</span>
+        <span class="stat-value" id="statPending">0</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">Audited</span>
+        <span class="stat-value" id="statAudited">0</span>
+      </div>
+    </div>
+
+    <div class="filter-bar">
+      <button class="filter-btn active" data-filter="pending">Pending</button>
+      <button class="filter-btn" data-filter="approved">Approved</button>
+      <button class="filter-btn" data-filter="all">All</button>
+    </div>
+
+    <div id="sessionList" class="session-list">
+      <div class="empty-state">
+        <p>No inspection sessions found.</p>
+        <p>Sessions approved by QC will appear here.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/i18n.js"></script>
+<script src="../assets/js/storage/storage-adapter.js"></script>
+<script src="../assets/js/inspection-core.js"></script>
+<script>
+const Audit = {
+  storage: null,
+  currentFilter: 'pending',
+
+  async init() {
+    this.storage = await Storage.get();
+    this.bindEvents();
+    await this.loadSessions();
+  },
+
+  bindEvents() {
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.currentFilter = btn.dataset.filter;
+        this.loadSessions();
+      });
+    });
+  },
+
+  async loadSessions() {
+    const sessions = await this.storage.listSessions();
+    const lang = typeof I18n !== 'undefined' ? I18n.current : 'en';
+
+    let filtered = sessions;
+    if (this.currentFilter === 'pending') {
+      filtered = sessions.filter(s => s.status === 'approved' && !s.auditReview);
+    } else if (this.currentFilter === 'approved') {
+      filtered = sessions.filter(s => s.auditReview && s.auditReview.decision === 'approved');
+    }
+
+    const pending = sessions.filter(s => s.status === 'approved' && !s.auditReview).length;
+    const audited = sessions.filter(s => s.auditReview).length;
+    document.getElementById('statPending').textContent = pending;
+    document.getElementById('statAudited').textContent = audited;
+
+    const list = document.getElementById('sessionList');
+    if (filtered.length === 0) {
+      list.innerHTML = '<div class="empty-state"><p>No sessions found for this filter.</p></div>';
+      return;
+    }
+
+    list.innerHTML = filtered.map(s => {
+      const date = InspectionCore.Utils.formatDate(s.inspectionDate, lang);
+      const badge = s.auditReview
+        ? '<span class="badge badge-ok">Audited</span>'
+        : '<span class="badge badge-pending">Pending Audit</span>';
+      return `
+        <div class="session-card" onclick="Audit.openSession('${s.id}')">
+          <div class="session-card-header">
+            <div>
+              <div class="session-id">${s.pi} · ${s.id}</div>
+              <div class="session-title">${s.model}-${s.version}</div>
+            </div>
+            ${badge}
+          </div>
+          <div class="session-meta">
+            <span class="session-meta-item">📅 ${date}</span>
+            <span class="session-meta-item">📦 ${s.boxCount} boxes</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+  },
+
+  openSession(sessionId) {
+    window.location.href = 'report.html?session=' + sessionId + '&role=audit';
+  }
+};
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => Audit.init());
+} else {
+  Audit.init();
+}
+window.Audit = Audit;
+</script>
+</body>
+</html>
