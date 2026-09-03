@@ -1,0 +1,588 @@
+/* ============================================
+   INSPECTION REPORT - Modway/Qarma Style
+   ============================================ */
+
+.report-page {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: var(--space-5);
+  background: white;
+}
+
+@media print {
+  body {
+    background: white !important;
+  }
+  .report-page {
+    padding: 20px 32px;
+    max-width: none;
+  }
+}
+
+.loading-screen {
+  text-align: center;
+  padding: var(--space-8);
+}
+
+.loading-screen .spinner {
+  margin: 0 auto;
+  width: 32px;
+  height: 32px;
+}
+
+/* Report header */
+.report-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding-bottom: var(--space-4);
+  border-bottom: 1.5px solid var(--text-primary);
+  margin-bottom: var(--space-5);
+}
+
+.report-header-left h1 {
+  font-size: 26px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  letter-spacing: -0.01em;
+  margin-bottom: 4px;
+}
+
+.report-header-left h2 {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+
+.report-header-right {
+  text-align: right;
+}
+
+.report-logo {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.report-online-link {
+  font-size: 11px;
+  color: var(--status-info);
+  text-decoration: underline;
+  margin-top: 4px;
+  display: inline-block;
+}
+
+/* Info table - top metadata */
+.info-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: var(--space-4);
+}
+
+.info-table tr {
+  border-bottom: 1px solid var(--border);
+}
+
+.info-table tr:first-child {
+  border-top: 1px solid var(--border);
+}
+
+.info-table td {
+  padding: 8px 12px;
+  font-size: 13px;
+  vertical-align: middle;
+}
+
+.info-table td:first-child,
+.info-table td:nth-child(3) {
+  color: var(--text-tertiary);
+  background: var(--bg-secondary);
+  width: 18%;
+  font-weight: 500;
+  border-right: 1px solid var(--border);
+}
+
+.info-table td:nth-child(2),
+.info-table td:nth-child(4) {
+  width: 32%;
+}
+
+/* Status row */
+.status-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  margin-bottom: var(--space-3);
+}
+
+.status-cell {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-right: none;
+}
+
+.status-cell:last-child {
+  border-right: 1px solid var(--border);
+}
+
+.status-cell-label {
+  flex: 1;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.status-cell-value {
+  padding: 10px 16px;
+  font-weight: 600;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  min-width: 100px;
+  justify-content: center;
+}
+
+.status-approved {
+  background: var(--status-ok);
+  color: white;
+}
+
+.status-pending {
+  background: var(--status-pending);
+  color: white;
+}
+
+.status-rejected {
+  background: var(--status-error);
+  color: white;
+}
+
+.status-overall {
+  display: flex;
+  border: 1px solid var(--border);
+  margin-bottom: var(--space-5);
+}
+
+.status-overall-label {
+  flex: 1;
+  padding: 12px 16px;
+  font-weight: 500;
+  text-align: right;
+}
+
+.status-overall-value {
+  padding: 12px 24px;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+}
+
+/* Section */
+.report-section {
+  margin-bottom: var(--space-5);
+  page-break-inside: avoid;
+}
+
+.section-title {
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: var(--space-3);
+  padding-bottom: 6px;
+  border-bottom: 1.5px solid var(--text-primary);
+}
+
+/* Summary table */
+.summary-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: var(--space-4);
+  font-size: 12px;
+}
+
+.summary-table th,
+.summary-table td {
+  padding: 10px 8px;
+  border: 1px solid var(--border);
+  text-align: left;
+}
+
+.summary-table th {
+  background: var(--bg-secondary);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+}
+
+.summary-table th:first-child {
+  width: 40%;
+  text-align: left;
+}
+
+.summary-table th:not(:first-child),
+.summary-table td:not(:first-child) {
+  text-align: center;
+  font-family: var(--font-mono);
+}
+
+.summary-row-header {
+  background: var(--bg-secondary);
+  font-weight: 600;
+}
+
+.summary-cell-ok {
+  background: var(--status-ok);
+  height: 6px;
+  display: block;
+  width: 100%;
+  border-radius: 2px;
+}
+
+.summary-cell-warning {
+  background: var(--status-warning);
+  height: 6px;
+  display: block;
+  width: 100%;
+  border-radius: 2px;
+}
+
+.summary-cell-error {
+  background: var(--status-error);
+  height: 6px;
+  display: block;
+  width: 100%;
+  border-radius: 2px;
+}
+
+.summary-status-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+  margin: 0 auto;
+}
+
+.summary-status-icon.icon-ok {
+  background: var(--status-ok-bg);
+  color: var(--status-ok);
+}
+
+.summary-status-icon.icon-warning {
+  background: var(--status-warning-bg);
+  color: var(--status-warning);
+}
+
+.summary-status-icon.icon-error {
+  background: var(--status-error-bg);
+  color: var(--status-error);
+}
+
+.summary-status-icon.icon-pending {
+  background: var(--status-pending-bg);
+  color: var(--status-pending);
+}
+
+/* Defect totals table */
+.defect-totals-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: var(--space-4);
+  font-size: 12px;
+}
+
+.defect-totals-table th,
+.defect-totals-table td {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  text-align: center;
+}
+
+.defect-totals-table th {
+  background: var(--bg-secondary);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 11px;
+}
+
+.defect-totals-table th:first-child,
+.defect-totals-table td:first-child {
+  text-align: left;
+  width: 40%;
+}
+
+.defect-totals-table .total-row {
+  font-weight: 700;
+  background: var(--bg-secondary);
+}
+
+.defect-totals-table .aql-row {
+  font-weight: 700;
+  background: var(--bg-tertiary);
+}
+
+/* Defect entry */
+.defect-entry {
+  margin-bottom: var(--space-4);
+  page-break-inside: avoid;
+}
+
+.defect-header-row {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  margin-bottom: 0;
+}
+
+.defect-number {
+  padding: 10px 16px;
+  font-weight: 600;
+  font-size: 13px;
+  border-right: 1px solid var(--border);
+  background: var(--bg-secondary);
+  min-width: 40px;
+  text-align: center;
+}
+
+.defect-info {
+  flex: 1;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.defect-severity-cell {
+  padding: 8px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-left: 1px solid var(--border);
+  min-width: 90px;
+  text-align: right;
+}
+
+.defect-severity-cell.sev-critical { color: var(--severity-critical); }
+.defect-severity-cell.sev-major    { color: var(--severity-major); }
+.defect-severity-cell.sev-minor    { color: var(--severity-minor); }
+
+.defect-affected {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  font-weight: 500;
+  margin-top: 2px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.defect-photos-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-top: none;
+  background: var(--bg-card);
+}
+
+@media (min-width: 800px) {
+  .defect-photos-row {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.report-photo {
+  aspect-ratio: 4/3;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.report-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Checkpoint */
+.checkpoint-section {
+  margin-bottom: var(--space-3);
+  page-break-inside: avoid;
+}
+
+.checkpoint-row {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
+.checkpoint-row.parent-row {
+  background: var(--bg-card);
+}
+
+.checkpoint-row.child-row {
+  background: var(--bg-card);
+}
+
+.checkpoint-id {
+  padding: 8px 12px;
+  font-weight: 600;
+  font-size: 12px;
+  border-right: 1px solid var(--border);
+  background: var(--bg-secondary);
+  min-width: 50px;
+  text-align: center;
+  font-family: var(--font-mono);
+}
+
+.parent-row .checkpoint-id {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.checkpoint-name {
+  flex: 1;
+  padding: 8px 14px;
+  font-size: 12px;
+}
+
+.parent-row .checkpoint-name {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.checkpoint-status {
+  padding: 6px 14px;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-left: 1px solid var(--border);
+  min-width: 70px;
+  text-align: right;
+}
+
+.checkpoint-status.status-ok { color: var(--status-ok); }
+.checkpoint-status.status-not-ok { color: var(--status-error); }
+.checkpoint-status.status-pending { color: var(--status-pending); }
+
+.checkpoint-status-bar {
+  display: block;
+  width: 60px;
+  height: 4px;
+  background: var(--status-ok);
+  border-radius: 2px;
+}
+
+.checkpoint-photos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 6px;
+  margin: var(--space-2) 0 var(--space-3);
+}
+
+@media (min-width: 800px) {
+  .checkpoint-photos {
+    grid-template-columns: repeat(5, 1fr);
+  }
+}
+
+/* Comments section */
+.comments-section {
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1.5px solid var(--text-primary);
+}
+
+.comment-entry {
+  display: grid;
+  grid-template-columns: 200px 200px 1fr;
+  gap: var(--space-3);
+  padding: 8px 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  border-bottom: 1px dashed var(--border);
+}
+
+.comment-entry:last-child {
+  border-bottom: none;
+}
+
+.comment-divider {
+  border-top: 1px solid var(--border-strong);
+  margin: var(--space-3) 0;
+}
+
+/* Footer */
+.report-footer {
+  margin-top: var(--space-5);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+/* Comment / sticker note (for "1 sticker pasted on carton" type info) */
+.note-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--status-pending-bg);
+  color: var(--status-pending);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  margin-left: 4px;
+}
+
+/* Action bar (no-print) */
+.report-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-bottom: var(--space-4);
+}
+
+/* Mobile */
+@media (max-width: 700px) {
+  .report-page {
+    padding: var(--space-3);
+  }
+  .report-header-left h1 { font-size: 22px; }
+  .report-header-left h2 { font-size: 18px; }
+  .info-table td { font-size: 11px; padding: 6px 8px; }
+  .info-table td:first-child,
+  .info-table td:nth-child(3) { width: 25%; }
+
+  .summary-table { font-size: 10px; }
+  .summary-table th, .summary-table td { padding: 6px 4px; }
+
+  .comment-entry {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .defect-header-row {
+    flex-wrap: wrap;
+  }
+  .defect-severity-cell {
+    border-left: none;
+    border-top: 1px solid var(--border);
+    width: 100%;
+    text-align: left;
+  }
+}
