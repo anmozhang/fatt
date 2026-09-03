@@ -64,8 +64,6 @@ const LandingPage = {
   goToRole(role) {
     const paths = {
       bteam: 'pages/bteam.html',
-      qc: 'pages/qc.html',
-      audit: 'pages/audit.html',
       customer: 'pages/customer.html'
     };
     if (paths[role]) window.location.href = paths[role];
