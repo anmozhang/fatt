@@ -154,12 +154,18 @@ const BTeam = {
     }
   },
 
-  createSession() {
+  _esc(str) {
+    return String(str == null ? '' : str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  },
+
+  _saveBasicInfo() {
     const customer = document.getElementById('customerInput').value.trim();
-    if (!customer) { alert(window.t ? window.t('form.customer') : 'Please enter customer name'); return; }
+    if (!customer) { alert(window.t ? window.t('form.customer') : 'Please enter customer name'); return false; }
     const now = new Date();
-    this.sessionId = 'session_' + now.getTime();
+    const existing = this.sessionData || {};
+    if (!this.sessionId) this.sessionId = 'session_' + now.getTime();
     this.sessionData = {
+      ...existing,
       customer: customer,
       inspectionDate: document.getElementById('inspectionDate').value,
       pi: document.getElementById('piInput').value.trim(),
@@ -169,17 +175,21 @@ const BTeam = {
       color: document.getElementById('colorInput').value.trim(),
       type: document.getElementById('typeInput').value,
       boxCount: document.getElementById('boxCountInput').value,
-      timestamp: this._formatTimestamp(now),
-      status: 'in_progress',
-      photos: [],
-      createdAt: now.getTime()
+      timestamp: existing.timestamp || this._formatTimestamp(now),
+      status: existing.status || 'in_progress',
+      photos: existing.photos || [],
+      createdAt: existing.createdAt || now.getTime()
     };
     localStorage.setItem('fatt_current_session', this.sessionId);
     document.getElementById('sessionName').textContent = customer;
     if (typeof StorageAdapter !== 'undefined') {
       StorageAdapter.saveSession(this.sessionId, this.sessionData);
     }
-    this.goToStep(1);
+    return true;
+  },
+
+  createSession() {
+    if (this._saveBasicInfo()) this.goToStep(1);
   },
 
   goToStep(step) {
@@ -195,12 +205,70 @@ const BTeam = {
   },
 
   prevStep() { if (this.currentStep > 0) this.goToStep(this.currentStep - 1); },
-  nextStep() { if (this.currentStep < STEPS.length - 1) this.goToStep(this.currentStep + 1); },
+  nextStep() {
+    if (this.currentStep === 0 && !this._saveBasicInfo()) return;
+    if (this.currentStep < STEPS.length - 1) this.goToStep(this.currentStep + 1);
+  },
 
   _renderStepContent(step) {
     const content = document.getElementById('stepContent');
     const stepKey = STEPS[step].key;
-    if (stepKey === 'photos') {
+    if (stepKey === 'setup') {
+      const d = this.sessionData || {};
+      const ts = d.timestamp || this._formatTimestamp(new Date());
+      const today = new Date().toISOString().split('T')[0];
+      content.innerHTML = `
+        <div class="step-title" data-i18n="bteam.start_new">开始新检验</div>
+        <div class="step-subtitle" data-i18n="role.bteam.desc">现场拍照 · 上传照片 · 记录数据</div>
+        <div class="data-form" style="margin-top:16px;">
+          <div class="form-group">
+            <label class="form-label" data-i18n="form.timestamp">提交时间</label>
+            <div class="form-control" id="timestampDisplay" style="display:flex;align-items:center;color:#888;background:rgba(255,255,255,0.03);">${this._esc(ts)}</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" data-i18n="form.customer">客户</label>
+            <input class="form-control" id="customerInput" type="text" data-i18n-placeholder="form.customer.placeholder" placeholder="例如：Modway" value="${this._esc(d.customer || '')}" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" data-i18n="form.inspection_date">检验日期</label>
+            <input class="form-control" id="inspectionDate" type="date" value="${this._esc(d.inspectionDate || today)}" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" data-i18n="form.pi">PI 单号 (Proforma Invoice)</label>
+            <input class="form-control" id="piInput" type="text" data-i18n-placeholder="form.pi.placeholder" placeholder="例如：0018541" value="${this._esc(d.pi || '')}" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" data-i18n="form.batch">批次</label>
+            <input class="form-control" id="batchInput" type="text" data-i18n-placeholder="form.batch.placeholder" placeholder="例如：B001" value="${this._esc(d.batch || '')}" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" data-i18n="form.model">型号</label>
+            <input class="form-control" id="modelInput" type="text" data-i18n-placeholder="form.model.placeholder" placeholder="例如：EEI-7672" value="${this._esc(d.model || '')}" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" data-i18n="form.version">版本</label>
+            <input class="form-control" id="versionInput" type="text" data-i18n-placeholder="form.version.placeholder" placeholder="例如：NAT" value="${this._esc(d.version || '')}" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" data-i18n="form.color">颜色</label>
+            <input class="form-control" id="colorInput" type="text" data-i18n-placeholder="form.color.placeholder" placeholder="例如：Natural" value="${this._esc(d.color || '')}" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" data-i18n="form.type">检验类型</label>
+            <select class="form-control" id="typeInput">
+              <option value="psi" data-i18n="form.type.psi" ${(!d.type || d.type === 'psi') ? 'selected' : ''}>PSI 生产检验</option>
+              <option value="sample" data-i18n="form.type.sample" ${d.type === 'sample' ? 'selected' : ''}>Sample 样品检验</option>
+              <option value="final" data-i18n="form.type.final" ${d.type === 'final' ? 'selected' : ''}>Final 最终检验</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" data-i18n="form.box_count">箱数</label>
+            <input class="form-control" id="boxCountInput" type="number" min="1" placeholder="1" value="${this._esc(d.boxCount || '')}" />
+          </div>
+          <button class="btn btn-primary w-full" onclick="BTeam.createSession()" data-i18n="bteam.start_new">开始新检验</button>
+        </div>
+      `;
+    } else if (stepKey === 'photos') {
       content.innerHTML = `
         <div class="step-title" data-i18n="photo.title">照片采集</div>
         <div class="d-flex gap-12" style="margin-top:16px;">
@@ -214,6 +282,7 @@ const BTeam = {
         <input type="file" id="galleryInput" accept="image/*" multiple style="display:none" onchange="BTeam.handlePhotos(this)" />
         <div class="photo-grid" id="photoGrid"></div>
       `;
+      this._renderPhotoGrid();
     } else if (stepKey === 'submit') {
       content.innerHTML = `
         <div class="step-title">提交检验</div>
@@ -251,20 +320,55 @@ const BTeam = {
 
   handlePhotos(input) {
     const files = Array.from(input.files);
-    const grid = document.getElementById('photoGrid');
-    files.forEach((file, idx) => {
+    if (!this.sessionData) this.sessionData = {};
+    if (!this.sessionData.photos) this.sessionData.photos = [];
+    files.forEach((file) => {
       const reader = new FileReader();
       reader.onload = (e) => {
-        const div = document.createElement('div');
-        div.className = 'photo-item';
-        div.innerHTML = `<img src="${e.target.result}" alt="photo ${idx}" /><div class="photo-item-overlay"><button class="photo-remove" onclick="this.closest('.photo-item').remove()">删除</button></div>`;
-        grid.appendChild(div);
+        const photoId = 'photo_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+        this.sessionData.photos.push(photoId);
         if (typeof StorageAdapter !== 'undefined' && this.sessionId) {
-          StorageAdapter.saveImage(this.sessionId, 'photo_' + Date.now(), e.target.result);
+          StorageAdapter.saveImage(this.sessionId, photoId, e.target.result);
+          StorageAdapter.saveSession(this.sessionId, this.sessionData);
         }
+        this._addPhotoToGrid(photoId, e.target.result);
       };
       reader.readAsDataURL(file);
     });
+    input.value = '';
+  },
+
+  _addPhotoToGrid(photoId, dataUrl) {
+    const grid = document.getElementById('photoGrid');
+    if (!grid) return;
+    const div = document.createElement('div');
+    div.className = 'photo-item';
+    div.dataset.photoId = photoId;
+    div.innerHTML = `<img src="${dataUrl}" alt="photo" /><div class="photo-item-overlay"><button class="photo-remove" onclick="BTeam.removePhoto('${photoId}')">删除</button></div>`;
+    grid.appendChild(div);
+  },
+
+  _renderPhotoGrid() {
+    const grid = document.getElementById('photoGrid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    const photos = (this.sessionData && this.sessionData.photos) || [];
+    photos.forEach(photoId => {
+      const dataUrl = (typeof StorageAdapter !== 'undefined' && this.sessionId) ? StorageAdapter.loadImage(this.sessionId, photoId) : null;
+      if (dataUrl) this._addPhotoToGrid(photoId, dataUrl);
+    });
+  },
+
+  removePhoto(photoId) {
+    if (this.sessionData && this.sessionData.photos) {
+      this.sessionData.photos = this.sessionData.photos.filter(id => id !== photoId);
+      if (typeof StorageAdapter !== 'undefined' && this.sessionId) {
+        StorageAdapter.saveSession(this.sessionId, this.sessionData);
+        localStorage.removeItem('fatt_img_' + this.sessionId + '_' + photoId);
+      }
+    }
+    const el = document.querySelector(`.photo-item[data-photo-id="${photoId}"]`);
+    if (el) el.remove();
   },
 
   submitInspection() {
