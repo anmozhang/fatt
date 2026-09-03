@@ -202,13 +202,16 @@ const BTeam = {
     const stepKey = STEPS[step].key;
     if (stepKey === 'photos') {
       content.innerHTML = `
-        <div class="step-title">上传照片</div>
-        <div class="upload-zone" onclick="document.getElementById('photoInput').click()">
-          <div class="upload-zone-icon">📷</div>
-          <div class="upload-zone-text">点击或拖拽上传照片</div>
-          <div class="upload-zone-hint">支持 JPG, PNG，每张最大 5MB</div>
+        <div class="step-title" data-i18n="photo.title">照片采集</div>
+        <div class="d-flex gap-12" style="margin-top:16px;">
+          <button class="btn btn-primary w-full" onclick="document.getElementById('cameraInput').click()">
+            <span aria-hidden="true">📷</span><span data-i18n="photo.take_photo">拍照</span>
+          </button>
+          <button class="btn btn-ghost w-full" onclick="document.getElementById('galleryInput').click()" data-i18n="photo.upload">从相册选择</button>
         </div>
-        <input type="file" id="photoInput" accept="image/*" multiple style="display:none" onchange="BTeam.handlePhotos(this)" />
+        <div class="upload-zone-hint" style="text-align:center;margin-top:8px;">支持 JPG, PNG，每张最大 5MB</div>
+        <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none" onchange="BTeam.handlePhotos(this)" />
+        <input type="file" id="galleryInput" accept="image/*" multiple style="display:none" onchange="BTeam.handlePhotos(this)" />
         <div class="photo-grid" id="photoGrid"></div>
       `;
     } else if (stepKey === 'submit') {
