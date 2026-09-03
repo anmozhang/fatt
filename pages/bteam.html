@@ -30,7 +30,7 @@
 
   <!-- Session Bar -->
   <div class="session-bar">
-    <div class="session-info"><span data-i18n="audit.title">Audit</span>: <strong id="sessionName">--</strong></div>
+    <div class="session-info"><span data-i18n="bteam.session">检验单</span>: <strong id="sessionName">--</strong></div>
     <div class="session-badge" id="sessionBadge">New</div>
   </div>
 
@@ -41,26 +41,54 @@
   <div class="step-content" id="stepContent">
     <!-- Step 0: New Session -->
     <div id="step-0">
-      <div class="step-title" data-i18n="msg.session_created">New Inspection</div>
+      <div class="step-title" data-i18n="bteam.start_new">开始新检验</div>
       <div class="step-subtitle" data-i18n="role.bteam.desc">现场拍照 · 上传照片 · 记录数据</div>
       <div class="data-form" style="margin-top:16px;">
         <div class="form-group">
-          <label class="form-label">Product Name</label>
-          <input class="form-control" id="productName" type="text" placeholder="Product name..." />
+          <label class="form-label" data-i18n="form.timestamp">提交时间</label>
+          <div class="form-control" id="timestampDisplay" style="display:flex;align-items:center;color:#888;background:rgba(255,255,255,0.03);">--</div>
         </div>
         <div class="form-group">
-          <label class="form-label">Factory</label>
-          <input class="form-control" id="factoryName" type="text" placeholder="Factory name..." />
+          <label class="form-label" data-i18n="form.customer">客户</label>
+          <input class="form-control" id="customerInput" type="text" data-i18n-placeholder="form.customer.placeholder" placeholder="例如：Modway" />
         </div>
         <div class="form-group">
-          <label class="form-label">Date</label>
+          <label class="form-label" data-i18n="form.inspection_date">检验日期</label>
           <input class="form-control" id="inspectionDate" type="date" />
         </div>
         <div class="form-group">
-          <label class="form-label">PO Number</label>
-          <input class="form-control" id="poNumber" type="text" placeholder="PO-..." />
+          <label class="form-label" data-i18n="form.pi">PI 单号 (Proforma Invoice)</label>
+          <input class="form-control" id="piInput" type="text" data-i18n-placeholder="form.pi.placeholder" placeholder="例如：0018541" />
         </div>
-        <button class="btn btn-primary w-full" onclick="BTeam.createSession()" data-i18n="msg.session_created">Start Inspection</button>
+        <div class="form-group">
+          <label class="form-label" data-i18n="form.batch">批次</label>
+          <input class="form-control" id="batchInput" type="text" data-i18n-placeholder="form.batch.placeholder" placeholder="例如：B001" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" data-i18n="form.model">型号</label>
+          <input class="form-control" id="modelInput" type="text" data-i18n-placeholder="form.model.placeholder" placeholder="例如：EEI-7672" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" data-i18n="form.version">版本</label>
+          <input class="form-control" id="versionInput" type="text" data-i18n-placeholder="form.version.placeholder" placeholder="例如：NAT" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" data-i18n="form.color">颜色</label>
+          <input class="form-control" id="colorInput" type="text" data-i18n-placeholder="form.color.placeholder" placeholder="例如：Natural" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" data-i18n="form.type">检验类型</label>
+          <select class="form-control" id="typeInput">
+            <option value="psi" data-i18n="form.type.psi">PSI 生产检验</option>
+            <option value="sample" data-i18n="form.type.sample">Sample 样品检验</option>
+            <option value="final" data-i18n="form.type.final">Final 最终检验</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" data-i18n="form.box_count">箱数</label>
+          <input class="form-control" id="boxCountInput" type="number" min="1" placeholder="1" />
+        </div>
+        <button class="btn btn-primary w-full" onclick="BTeam.createSession()" data-i18n="bteam.start_new">开始新检验</button>
       </div>
     </div>
   </div>
@@ -98,6 +126,14 @@ const BTeam = {
     // Set default date
     const dateInput = document.getElementById('inspectionDate');
     if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
+    // Auto-fill submission timestamp (read-only, informational)
+    const tsDisplay = document.getElementById('timestampDisplay');
+    if (tsDisplay) tsDisplay.textContent = this._formatTimestamp(new Date());
+  },
+
+  _formatTimestamp(d) {
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
   },
 
   _renderSteps() {
@@ -119,20 +155,27 @@ const BTeam = {
   },
 
   createSession() {
-    const name = document.getElementById('productName').value.trim();
-    if (!name) { alert('Please enter product name'); return; }
-    this.sessionId = 'session_' + Date.now();
+    const customer = document.getElementById('customerInput').value.trim();
+    if (!customer) { alert(window.t ? window.t('form.customer') : 'Please enter customer name'); return; }
+    const now = new Date();
+    this.sessionId = 'session_' + now.getTime();
     this.sessionData = {
-      productName: name,
-      factory: document.getElementById('factoryName').value,
-      date: document.getElementById('inspectionDate').value,
-      poNumber: document.getElementById('poNumber').value,
+      customer: customer,
+      inspectionDate: document.getElementById('inspectionDate').value,
+      pi: document.getElementById('piInput').value.trim(),
+      batch: document.getElementById('batchInput').value.trim(),
+      model: document.getElementById('modelInput').value.trim(),
+      version: document.getElementById('versionInput').value.trim(),
+      color: document.getElementById('colorInput').value.trim(),
+      type: document.getElementById('typeInput').value,
+      boxCount: document.getElementById('boxCountInput').value,
+      timestamp: this._formatTimestamp(now),
       status: 'in_progress',
       photos: [],
-      createdAt: Date.now()
+      createdAt: now.getTime()
     };
     localStorage.setItem('fatt_current_session', this.sessionId);
-    document.getElementById('sessionName').textContent = name;
+    document.getElementById('sessionName').textContent = customer;
     if (typeof StorageAdapter !== 'undefined') {
       StorageAdapter.saveSession(this.sessionId, this.sessionData);
     }
@@ -172,22 +215,35 @@ const BTeam = {
       content.innerHTML = `
         <div class="step-title">提交检验</div>
         <div class="aql-panel" style="margin-top:16px;">
-          <div class="aql-row"><span class="aql-label">产品</span><span class="aql-value" id="sum-product">-</span></div>
-          <div class="aql-row"><span class="aql-label">工厂</span><span class="aql-value" id="sum-factory">-</span></div>
-          <div class="aql-row"><span class="aql-label">日期</span><span class="aql-value" id="sum-date">-</span></div>
-          <div class="aql-row"><span class="aql-label">PO</span><span class="aql-value" id="sum-po">-</span></div>
+          <div class="aql-row"><span class="aql-label" data-i18n="form.timestamp">提交时间</span><span class="aql-value" id="sum-timestamp">-</span></div>
+          <div class="aql-row"><span class="aql-label" data-i18n="form.customer">客户</span><span class="aql-value" id="sum-customer">-</span></div>
+          <div class="aql-row"><span class="aql-label" data-i18n="form.inspection_date">检验日期</span><span class="aql-value" id="sum-date">-</span></div>
+          <div class="aql-row"><span class="aql-label" data-i18n="form.pi">PI 单号</span><span class="aql-value" id="sum-pi">-</span></div>
+          <div class="aql-row"><span class="aql-label" data-i18n="form.batch">批次</span><span class="aql-value" id="sum-batch">-</span></div>
+          <div class="aql-row"><span class="aql-label" data-i18n="form.model">型号</span><span class="aql-value" id="sum-model">-</span></div>
+          <div class="aql-row"><span class="aql-label" data-i18n="form.version">版本</span><span class="aql-value" id="sum-version">-</span></div>
+          <div class="aql-row"><span class="aql-label" data-i18n="form.color">颜色</span><span class="aql-value" id="sum-color">-</span></div>
+          <div class="aql-row"><span class="aql-label" data-i18n="form.type">检验类型</span><span class="aql-value" id="sum-type">-</span></div>
+          <div class="aql-row"><span class="aql-label" data-i18n="form.box_count">箱数</span><span class="aql-value" id="sum-boxcount">-</span></div>
         </div>
         <button class="btn btn-success w-full" style="margin-top:20px;" onclick="BTeam.submitInspection()" data-i18n="common.submit">提交检验</button>
       `;
       if (this.sessionData) {
-        document.getElementById('sum-product').textContent = this.sessionData.productName || '-';
-        document.getElementById('sum-factory').textContent = this.sessionData.factory || '-';
-        document.getElementById('sum-date').textContent = this.sessionData.date || '-';
-        document.getElementById('sum-po').textContent = this.sessionData.poNumber || '-';
+        document.getElementById('sum-timestamp').textContent = this.sessionData.timestamp || '-';
+        document.getElementById('sum-customer').textContent = this.sessionData.customer || '-';
+        document.getElementById('sum-date').textContent = this.sessionData.inspectionDate || '-';
+        document.getElementById('sum-pi').textContent = this.sessionData.pi || '-';
+        document.getElementById('sum-batch').textContent = this.sessionData.batch || '-';
+        document.getElementById('sum-model').textContent = this.sessionData.model || '-';
+        document.getElementById('sum-version').textContent = this.sessionData.version || '-';
+        document.getElementById('sum-color').textContent = this.sessionData.color || '-';
+        document.getElementById('sum-type').textContent = this.sessionData.type ? (window.t ? window.t('form.type.' + this.sessionData.type) : this.sessionData.type) : '-';
+        document.getElementById('sum-boxcount').textContent = this.sessionData.boxCount || '-';
       }
     } else {
       content.innerHTML = `<div class="step-title">${STEPS[step].label}</div><p style="color:#666;font-size:13px;margin-top:8px;">此步骤功能开发中...</p>`;
     }
+    if (window.I18n) I18n.apply();
   },
 
   handlePhotos(input) {
