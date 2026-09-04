@@ -115,10 +115,21 @@ const STEPS = [
   { key: 'submit', label: '提交' }
 ];
 
+const MEASURE_CATEGORIES = [
+  { key: 'carton_dimension_weight', zh: '箱体尺寸与重量', en: 'Dimension Carton & Weight' },
+  { key: 'every_panel', zh: '每个面板', en: 'Every Panel' },
+  { key: 'assembly_instruction', zh: '装配说明', en: 'Assembly Instruction' },
+  { key: 'accessories', zh: '配件', en: 'Accessories' },
+  { key: 'fully_assembly', zh: '完整装配', en: 'Fully Assembly' },
+  { key: 'dimension_assembly', zh: '装配尺寸', en: 'Dimension Assembly' },
+  { key: 'warning_label', zh: '警告标签', en: 'Warning Label' }
+];
+
 const BTeam = {
   currentStep: 0,
   sessionId: null,
   sessionData: {},
+  _expandedBoxes: new Set(),
 
   init() {
     this._renderSteps();
@@ -283,6 +294,9 @@ const BTeam = {
         <div class="photo-grid" id="photoGrid"></div>
       `;
       this._renderPhotoGrid();
+    } else if (stepKey === 'measurements') {
+      content.innerHTML = this._renderMeasurements();
+      this._attachDragHandlers();
     } else if (stepKey === 'submit') {
       content.innerHTML = `
         <div class="step-title">提交检验</div>
@@ -316,6 +330,201 @@ const BTeam = {
       content.innerHTML = `<div class="step-title">${STEPS[step].label}</div><p style="color:#666;font-size:13px;margin-top:8px;">此步骤功能开发中...</p>`;
     }
     if (window.I18n) I18n.apply();
+  },
+
+  _ensureMeasurements() {
+    if (!this.sessionData) this.sessionData = {};
+    if (!this.sessionData.measurements) this.sessionData.measurements = { boxes: {} };
+    const boxCount = Math.max(1, parseInt(this.sessionData.boxCount, 10) || 1);
+    for (let b = 1; b <= boxCount; b++) {
+      if (!this.sessionData.measurements.boxes[b]) this.sessionData.measurements.boxes[b] = {};
+      MEASURE_CATEGORIES.forEach(cat => {
+        if (!this.sessionData.measurements.boxes[b][cat.key]) {
+          this.sessionData.measurements.boxes[b][cat.key] = { photoIds: [], detail: '' };
+        }
+      });
+    }
+    return boxCount;
+  },
+
+  _getAssignedPhotoIds() {
+    const assigned = new Set();
+    const boxes = (this.sessionData.measurements && this.sessionData.measurements.boxes) || {};
+    Object.keys(boxes).forEach(b => {
+      Object.keys(boxes[b]).forEach(cat => {
+        (boxes[b][cat].photoIds || []).forEach(id => assigned.add(id));
+      });
+    });
+    return assigned;
+  },
+
+  _photoThumbHtml(photoId) {
+    const dataUrl = (typeof StorageAdapter !== 'undefined' && this.sessionId) ? StorageAdapter.loadImage(this.sessionId, photoId) : null;
+    if (!dataUrl) return '';
+    return `<div class="drag-thumb" data-photo-id="${photoId}"><img src="${dataUrl}" alt="photo" draggable="false" /></div>`;
+  },
+
+  _renderMeasurements() {
+    const boxCount = this._ensureMeasurements();
+    const allPhotoIds = this.sessionData.photos || [];
+    const assigned = this._getAssignedPhotoIds();
+    const poolIds = allPhotoIds.filter(id => !assigned.has(id));
+    const lang = (window.I18n && I18n.current === 'en') ? 'en' : 'zh';
+    const noPhotosText = window.t ? window.t('photo.no_photos') : (lang === 'en' ? 'No photos yet' : '暂无照片');
+    const detailPlaceholder = window.t ? window.t('measure.detail_placeholder') : (lang === 'en' ? 'Add notes...' : '填写备注...');
+
+    let html = `
+      <div class="step-title" data-i18n="measure.title">尺寸测量</div>
+      <div class="step-subtitle" data-i18n="measure.subtitle">将照片拖拽到对应分类</div>
+      <div class="photo-pool">
+        <div class="pool-title" data-i18n="measure.uploaded_photos">已上传照片</div>
+        <div class="pool-grid" id="photoPool" data-role="pool">
+    `;
+    if (poolIds.length === 0) {
+      html += `<div class="pool-empty-hint">${this._esc(noPhotosText)}</div>`;
+    } else {
+      poolIds.forEach(id => { html += this._photoThumbHtml(id); });
+    }
+    html += `</div></div><div id="boxesContainer">`;
+
+    for (let b = 1; b <= boxCount; b++) {
+      const isOpen = this._expandedBoxes.has(b);
+      html += `
+        <div class="box-section">
+          <div class="box-header" onclick="BTeam.toggleBox(${b})">
+            <span class="box-toggle-icon" id="boxIcon${b}">${isOpen ? '▼' : '▶'}</span>
+            <span data-i18n="measure.box">箱</span> ${b}
+          </div>
+          <div class="box-body" id="boxBody${b}" style="display:${isOpen ? 'flex' : 'none'};">
+      `;
+      MEASURE_CATEGORIES.forEach(cat => {
+        const catData = this.sessionData.measurements.boxes[b][cat.key];
+        const label = lang === 'en' ? cat.en : cat.zh;
+        html += `
+          <div class="category-block">
+            <div class="category-label">${this._esc(label)}</div>
+            <div class="dropzone" data-role="dropzone" data-box="${b}" data-cat="${cat.key}">
+        `;
+        if (!catData.photoIds || catData.photoIds.length === 0) {
+          html += `<div class="dropzone-empty-hint">${this._esc(noPhotosText)}</div>`;
+        } else {
+          catData.photoIds.forEach(id => { html += this._photoThumbHtml(id); });
+        }
+        html += `
+            </div>
+            <textarea class="form-control category-detail" placeholder="${this._esc(detailPlaceholder)}" oninput="BTeam.updateMeasureDetail(${b}, '${cat.key}', this.value)">${this._esc(catData.detail || '')}</textarea>
+          </div>
+        `;
+      });
+      html += `</div></div>`;
+    }
+    html += `</div>`;
+    return html;
+  },
+
+  toggleBox(b) {
+    if (this._expandedBoxes.has(b)) this._expandedBoxes.delete(b); else this._expandedBoxes.add(b);
+    const body = document.getElementById('boxBody' + b);
+    const icon = document.getElementById('boxIcon' + b);
+    const isOpen = this._expandedBoxes.has(b);
+    if (body) body.style.display = isOpen ? 'flex' : 'none';
+    if (icon) icon.textContent = isOpen ? '▼' : '▶';
+  },
+
+  updateMeasureDetail(box, cat, value) {
+    if (!this.sessionData.measurements || !this.sessionData.measurements.boxes[box]) return;
+    const entry = this.sessionData.measurements.boxes[box][cat];
+    if (!entry) return;
+    entry.detail = value;
+    if (typeof StorageAdapter !== 'undefined' && this.sessionId) {
+      StorageAdapter.saveSession(this.sessionId, this.sessionData);
+    }
+  },
+
+  _attachDragHandlers() {
+    const thumbs = document.querySelectorAll('#stepContent .drag-thumb');
+    thumbs.forEach(el => {
+      el.addEventListener('pointerdown', (ev) => this._onThumbPointerDown(ev, el));
+    });
+  },
+
+  _onThumbPointerDown(e, el) {
+    if (e.button !== undefined && e.button !== 0) return;
+    e.preventDefault();
+    const photoId = el.dataset.photoId;
+    const originZone = el.closest('[data-role]');
+    const originBox = originZone ? (originZone.dataset.box || null) : null;
+    const originCat = originZone ? (originZone.dataset.cat || null) : null;
+
+    const rect = el.getBoundingClientRect();
+    const ghost = el.cloneNode(true);
+    ghost.style.position = 'fixed';
+    ghost.style.left = rect.left + 'px';
+    ghost.style.top = rect.top + 'px';
+    ghost.style.width = rect.width + 'px';
+    ghost.style.height = rect.height + 'px';
+    ghost.style.zIndex = '9999';
+    ghost.style.pointerEvents = 'none';
+    ghost.style.opacity = '0.9';
+    ghost.style.transform = 'scale(1.1)';
+    ghost.classList.add('drag-ghost');
+    document.body.appendChild(ghost);
+    el.style.opacity = '0.3';
+
+    const offsetX = e.clientX - rect.left;
+    const offsetY = e.clientY - rect.top;
+    let lastZone = null;
+
+    const onMove = (ev) => {
+      ghost.style.left = (ev.clientX - offsetX) + 'px';
+      ghost.style.top = (ev.clientY - offsetY) + 'px';
+      ghost.style.display = 'none';
+      const under = document.elementFromPoint(ev.clientX, ev.clientY);
+      ghost.style.display = '';
+      const zone = under ? under.closest('[data-role]') : null;
+      if (lastZone && lastZone !== zone) lastZone.classList.remove('drag-over');
+      if (zone) zone.classList.add('drag-over');
+      lastZone = zone;
+    };
+
+    const onUp = (ev) => {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      document.removeEventListener('pointercancel', onUp);
+      ghost.remove();
+      el.style.opacity = '';
+      if (lastZone) lastZone.classList.remove('drag-over');
+
+      const target = lastZone;
+      if (target) {
+        const toBox = target.dataset.box || null;
+        const toCat = target.dataset.cat || null;
+        this._movePhoto(photoId, originBox, originCat, toBox, toCat);
+      }
+    };
+
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+    document.addEventListener('pointercancel', onUp);
+  },
+
+  _movePhoto(photoId, fromBox, fromCat, toBox, toCat) {
+    if (fromBox === toBox && fromCat === toCat) return;
+    if (fromBox && fromCat && this.sessionData.measurements && this.sessionData.measurements.boxes[fromBox] && this.sessionData.measurements.boxes[fromBox][fromCat]) {
+      const src = this.sessionData.measurements.boxes[fromBox][fromCat];
+      src.photoIds = (src.photoIds || []).filter(id => id !== photoId);
+    }
+    if (toBox && toCat) {
+      if (!this.sessionData.measurements) this.sessionData.measurements = { boxes: {} };
+      if (!this.sessionData.measurements.boxes[toBox]) this.sessionData.measurements.boxes[toBox] = {};
+      if (!this.sessionData.measurements.boxes[toBox][toCat]) this.sessionData.measurements.boxes[toBox][toCat] = { photoIds: [], detail: '' };
+      const dest = this.sessionData.measurements.boxes[toBox][toCat];
+      if (!dest.photoIds.includes(photoId)) dest.photoIds.push(photoId);
+    }
+    if (typeof StorageAdapter !== 'undefined' && this.sessionId) {
+      StorageAdapter.saveSession(this.sessionId, this.sessionData);
+    }
+    this._renderStepContent(this.currentStep);
   },
 
   handlePhotos(input) {
