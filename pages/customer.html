@@ -75,6 +75,10 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 });
 
 // Load reports
+function _esc(str) {
+  return String(str == null ? '' : str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
 async function loadReports() {
   if (typeof StorageAdapter === 'undefined') return;
   const sessions = await StorageAdapter.listSessions();
@@ -82,20 +86,43 @@ async function loadReports() {
   if (!sessions || sessions.length === 0) return;
   list.innerHTML = sessions.map(s => {
     const data = s.data || {};
-    return `<div class="card" style="cursor:pointer;" onclick="viewReport('${s.key}')">
+    // Support both the B Team inspection schema (customer/inspectionDate) and
+    // the older report schema (productName/factory/date).
+    const name = data.customer || data.productName || s.key;
+    const metaParts = [data.factory, data.inspectionDate || data.date].filter(Boolean);
+    const isSubmitted = data.status === 'submitted' || data.status === 'approved';
+    const badgeClass = isSubmitted ? 'success' : 'warning';
+    const badgeKey = isSubmitted ? 'common.submitted' : 'common.pending';
+    const badgeFallback = isSubmitted ? 'Submitted' : 'Pending';
+    return `<div class="card" style="cursor:pointer;" onclick="viewReport('${s.key}', ${isSubmitted})">
       <div style="display:flex;justify-content:space-between;align-items:start;">
         <div>
-          <div style="font-weight:600;margin-bottom:4px;">${data.productName || s.key}</div>
-          <div style="font-size:12px;color:#888;">${data.factory || ''} · ${data.date || ''}</div>
+          <div style="font-weight:600;margin-bottom:4px;">${_esc(name)}</div>
+          <div style="font-size:12px;color:#888;">${_esc(metaParts.join(' · '))}</div>
         </div>
-        <span class="badge badge-${data.status === 'approved' ? 'success' : 'warning'}" data-i18n="${data.status === 'approved' ? 'audit.approved_count' : 'common.pending'}">${data.status || 'pending'}</span>
+        <span class="badge badge-${badgeClass}" data-i18n="${badgeKey}">${badgeFallback}</span>
       </div>
     </div>`;
   }).join('');
+  if (window.I18n) I18n.apply();
 }
 
-function viewReport(sessionId) {
-  window.location.href = 'report.html?session=' + sessionId;
+function viewReport(sessionKey, isSubmitted) {
+  if (!isSubmitted) {
+    // StorageAdapter.listSessions() returns keys with its own "session_"
+    // prefix stripped off only the storage prefix ("fatt_"), so the key here
+    // is "session_" + the original sessionId (which itself already starts
+    // with "session_", e.g. "session_1788508578410"). bteam.html's
+    // _checkExistingSession() expects that original sessionId in
+    // fatt_current_session (it re-adds "session_" itself when calling
+    // StorageAdapter.loadSession), so strip the one extra "session_" layer
+    // back off here before jumping back into the wizard.
+    const sessionId = sessionKey.replace(/^session_/, '');
+    localStorage.setItem('fatt_current_session', sessionId);
+    window.location.href = 'bteam.html';
+    return;
+  }
+  window.location.href = 'report.html?session=' + sessionKey;
 }
 
 function submitFeedback() {
