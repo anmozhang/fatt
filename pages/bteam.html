@@ -25,7 +25,9 @@
       <span data-i18n="role.bteam.name">B Team</span>
       <span data-i18n="role.bteam.desc">现场拍照</span>
     </div>
-    <a href="../index.html" class="btn btn-ghost btn-sm" data-i18n="common.back">返回</a>
+    <a href="../index.html" class="btn btn-ghost btn-sm" title="Home">
+      <span aria-hidden="true">🏠</span> <span data-i18n="common.home">首页</span>
+    </a>
   </header>
 
   <!-- Session Bar -->
@@ -178,7 +180,11 @@ const BTeam = {
     this.sessionId = sid;
     this.sessionData = data;
     document.getElementById('sessionName').textContent = data.customer || sid;
-    this._renderStepContent(this.currentStep);
+    // Jump back to whichever step was open when the user last left (e.g. via
+    // the Home button), so resuming from the Customer folder's "Pending"
+    // list lands exactly where they left off instead of back at step 1.
+    const resumeStep = (typeof data.lastStep === 'number' && data.lastStep >= 0 && data.lastStep < STEPS.length) ? data.lastStep : 0;
+    this.goToStep(resumeStep);
   },
 
   _esc(str) {
@@ -229,6 +235,14 @@ const BTeam = {
     document.getElementById('navInfo').textContent = `Step ${step + 1} of ${STEPS.length}`;
     document.getElementById('prevBtn').style.opacity = step === 0 ? '0.3' : '1';
     this._renderStepContent(step);
+    // Remember progress so leaving via Home and resuming from the Customer
+    // folder's "Pending" list jumps straight back to this step.
+    if (this.sessionId && this.sessionData) {
+      this.sessionData.lastStep = step;
+      if (typeof StorageAdapter !== 'undefined') {
+        StorageAdapter.saveSession(this.sessionId, this.sessionData);
+      }
+    }
   },
 
   prevStep() { if (this.currentStep > 0) this.goToStep(this.currentStep - 1); },
