@@ -133,13 +133,13 @@ const BTeam = {
 
   init() {
     this._renderSteps();
-    this._checkExistingSession();
     // Set default date
     const dateInput = document.getElementById('inspectionDate');
     if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
     // Auto-fill submission timestamp (read-only, informational)
     const tsDisplay = document.getElementById('timestampDisplay');
     if (tsDisplay) tsDisplay.textContent = this._formatTimestamp(new Date());
+    this._checkExistingSession();
   },
 
   _formatTimestamp(d) {
@@ -157,12 +157,28 @@ const BTeam = {
     `).join('');
   },
 
-  _checkExistingSession() {
+  async _checkExistingSession() {
     const sid = localStorage.getItem('fatt_current_session');
-    if (sid) {
+    if (!sid) return;
+    if (typeof StorageAdapter === 'undefined') {
       this.sessionId = sid;
       document.getElementById('sessionName').textContent = sid;
+      return;
     }
+    const data = await StorageAdapter.loadSession(sid);
+    if (!data || data.status === 'submitted') {
+      // Finished (or unknown/legacy) session: don't silently resume it as the
+      // active one — a new "Start New Inspection" should get a fresh session.
+      localStorage.removeItem('fatt_current_session');
+      return;
+    }
+    // Restore the in-progress session in full (fixes photos/fields appearing to
+    // vanish if the page gets reloaded mid-inspection, e.g. by the mobile OS
+    // reclaiming the tab while the camera/gallery picker is open).
+    this.sessionId = sid;
+    this.sessionData = data;
+    document.getElementById('sessionName').textContent = data.customer || sid;
+    this._renderStepContent(this.currentStep);
   },
 
   _esc(str) {
@@ -553,7 +569,7 @@ const BTeam = {
     const div = document.createElement('div');
     div.className = 'photo-item';
     div.dataset.photoId = photoId;
-    div.innerHTML = `<img src="${dataUrl}" alt="photo" /><div class="photo-item-overlay"><button class="photo-remove" onclick="BTeam.removePhoto('${photoId}')">删除</button></div>`;
+    div.innerHTML = `<img src="${dataUrl}" alt="photo" /><button type="button" class="photo-remove" onclick="event.stopPropagation(); BTeam.removePhoto('${photoId}')" aria-label="Delete">✕</button>`;
     grid.appendChild(div);
   },
 
@@ -569,8 +585,22 @@ const BTeam = {
   },
 
   removePhoto(photoId) {
+    const lang = (window.I18n && I18n.current === 'en') ? 'en' : 'zh';
+    const confirmMsg = window.t ? window.t('photo.delete_confirm') : (lang === 'en' ? 'Delete this photo?' : '确定删除这张照片？');
+    if (!confirm(confirmMsg)) return;
     if (this.sessionData && this.sessionData.photos) {
       this.sessionData.photos = this.sessionData.photos.filter(id => id !== photoId);
+      // Also drop it from any measurement category it was dragged into, so
+      // step 3 never keeps a dangling reference to a deleted photo.
+      const boxes = this.sessionData.measurements && this.sessionData.measurements.boxes;
+      if (boxes) {
+        Object.keys(boxes).forEach(b => {
+          Object.keys(boxes[b]).forEach(cat => {
+            const entry = boxes[b][cat];
+            if (entry && entry.photoIds) entry.photoIds = entry.photoIds.filter(id => id !== photoId);
+          });
+        });
+      }
       if (typeof StorageAdapter !== 'undefined' && this.sessionId) {
         StorageAdapter.saveSession(this.sessionId, this.sessionData);
         localStorage.removeItem('fatt_img_' + this.sessionId + '_' + photoId);
