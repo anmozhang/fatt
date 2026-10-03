@@ -4,7 +4,13 @@
 
 /* ---- Layout ---- */
 .bteam-app { display: flex; flex-direction: column; min-height: 100vh; }
-.bteam-header { position: sticky; top: 0; z-index: 100; background: #1e1e1e; border-bottom: 1px solid #333; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+/* padding-right reserves space for the fixed, higher-z-index .lang-switcher
+   (EN/中文 toggle, top:12px right:16px, ~107px wide) that sits in the same
+   top-right corner on every page. Without this, the Home link below — the
+   header's own right-aligned flex item — renders directly underneath the
+   language switcher and is fully covered, so it can never actually be
+   clicked/tapped. See assets/css/main.css for .lang-switcher's own rules. */
+.bteam-header { position: sticky; top: 0; z-index: 100; background: #1e1e1e; border-bottom: 1px solid #333; padding: 12px 140px 12px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .bteam-logo { font-size: 1rem; font-weight: 700; color: #4fc3f7; display: flex; align-items: center; gap: 8px; }
 .bteam-logo span { color: #888; font-size: 12px; font-weight: 400; }
 
@@ -60,6 +66,16 @@
 .aql-label { color: #888; }
 .aql-value { font-weight: 600; color: #e0e0e0; }
 
+/* ---- Draft Recovery ---- */
+.drafts-panel { background: #1e1e1e; border: 1px solid #2a2a2a; border-radius: 10px; padding: 12px; margin-bottom: 16px; }
+.drafts-title { font-size: 12px; color: #888; font-weight: 600; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.03em; }
+.draft-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-radius: 8px; background: #222; border: 1px solid #2a2a2a; cursor: pointer; margin-bottom: 8px; transition: background 0.15s; }
+.draft-item:last-child { margin-bottom: 0; }
+.draft-item:hover { background: #262626; border-color: #3a3a3a; }
+.draft-name { font-size: 13px; font-weight: 600; color: #e0e0e0; }
+.draft-meta { font-size: 11px; color: #888; }
+.draft-arrow { color: #4fc3f7; font-size: 16px; }
+
 /* ---- Photo Pool & Measurement Categorization ---- */
 .photo-pool { background: #1e1e1e; border: 1px solid #2a2a2a; border-radius: 10px; padding: 12px; margin-bottom: 16px; }
 .pool-title { font-size: 12px; color: #888; font-weight: 600; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.03em; }
@@ -96,4 +112,7 @@
 @media (max-width: 480px) {
   .data-row { grid-template-columns: 1fr; }
   .photo-grid { grid-template-columns: repeat(3, 1fr); }
+  /* .lang-switcher moves to top:8px right:10px below 600px, so the Home
+     button needs slightly less reserved space here to avoid an oversized gap. */
+  .bteam-header { padding-right: 125px; }
 }
