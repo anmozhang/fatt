@@ -81,9 +81,17 @@ function _esc(str) {
 
 async function loadReports() {
   if (typeof StorageAdapter === 'undefined') return;
-  const sessions = await StorageAdapter.listSessions();
+  const allSessions = await StorageAdapter.listSessions();
   const list = document.getElementById('reportList');
-  if (!sessions || sessions.length === 0) return;
+  // Customer view only ever shows records that have actually been submitted
+  // by B Team (step 4's "submit") — everything else is still a draft in
+  // progress and must not be visible here. This is the logical separation
+  // the status field provides: no separate storage area, just a filter.
+  const sessions = (allSessions || []).filter(s => {
+    const data = s.data || {};
+    return data.status === 'submitted' || data.status === 'approved';
+  });
+  if (sessions.length === 0) return;
   list.innerHTML = sessions.map(s => {
     const data = s.data || {};
     // Support both the B Team inspection schema (customer/inspectionDate) and
