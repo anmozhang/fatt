@@ -132,7 +132,7 @@ const BTeam = {
   sessionData: {},
   _expandedBoxes: new Set(),
 
-  init() {
+  async init() {
     this._renderSteps();
     // Set default date
     const dateInput = document.getElementById('inspectionDate');
@@ -140,7 +140,13 @@ const BTeam = {
     // Auto-fill submission timestamp (read-only, informational)
     const tsDisplay = document.getElementById('timestampDisplay');
     if (tsDisplay) tsDisplay.textContent = this._formatTimestamp(new Date());
-    this._checkExistingSession();
+    const resumed = await this._checkExistingSession();
+    if (!resumed) {
+      // Nothing to resume: render step 0 dynamically so the "unfinished
+      // drafts" list (if any) shows up on first load too, not just when
+      // navigating back to step 0 later.
+      await this.goToStep(0);
+    }
   },
 
   _formatTimestamp(d) {
@@ -160,18 +166,18 @@ const BTeam = {
 
   async _checkExistingSession() {
     const sid = localStorage.getItem('fatt_current_session');
-    if (!sid) return;
+    if (!sid) return false;
     if (typeof StorageAdapter === 'undefined') {
       this.sessionId = sid;
       document.getElementById('sessionName').textContent = sid;
-      return;
+      return false;
     }
     const data = await StorageAdapter.loadSession(sid);
     if (!data || data.status === 'submitted') {
       // Finished (or unknown/legacy) session: don't silently resume it as the
       // active one — a new "Start New Inspection" should get a fresh session.
       localStorage.removeItem('fatt_current_session');
-      return;
+      return false;
     }
     // Restore the in-progress session in full (fixes photos/fields appearing to
     // vanish if the page gets reloaded mid-inspection, e.g. by the mobile OS
@@ -180,10 +186,21 @@ const BTeam = {
     this.sessionData = data;
     document.getElementById('sessionName').textContent = data.customer || sid;
     // Jump back to whichever step was open when the user last left (e.g. via
-    // the Home button), so resuming from the Customer folder's "Pending"
-    // list lands exactly where they left off instead of back at step 1.
+    // the Home button), so resuming from the drafts list or the Customer
+    // folder's "Pending" list lands exactly where they left off.
     const resumeStep = (typeof data.lastStep === 'number' && data.lastStep >= 0 && data.lastStep < STEPS.length) ? data.lastStep : 0;
-    this.goToStep(resumeStep);
+    await this.goToStep(resumeStep);
+    return true;
+  },
+
+  // Called from the "unfinished drafts" list (step 0) to jump into a draft
+  // other than whichever one fatt_current_session already points at — this
+  // is what lets more than one unfinished inspection be found again, instead
+  // of the single current-session pointer silently overwriting the way to
+  // reach an earlier draft.
+  async resumeDraft(sessionId) {
+    localStorage.setItem('fatt_current_session', sessionId);
+    await this._checkExistingSession();
   },
 
   _esc(str) {
@@ -220,11 +237,11 @@ const BTeam = {
     return true;
   },
 
-  createSession() {
-    if (this._saveBasicInfo()) this.goToStep(1);
+  async createSession() {
+    if (this._saveBasicInfo()) await this.goToStep(1);
   },
 
-  goToStep(step) {
+  async goToStep(step) {
     if (step < 0 || step >= STEPS.length) return;
     this.currentStep = step;
     document.querySelectorAll('.step-item').forEach((el, i) => {
@@ -233,9 +250,9 @@ const BTeam = {
     });
     document.getElementById('navInfo').textContent = `Step ${step + 1} of ${STEPS.length}`;
     document.getElementById('prevBtn').style.opacity = step === 0 ? '0.3' : '1';
-    this._renderStepContent(step);
-    // Remember progress so leaving via Home and resuming from the Customer
-    // folder's "Pending" list jumps straight back to this step.
+    await this._renderStepContent(step);
+    // Remember progress so leaving via Home and resuming from the drafts
+    // list or the Customer folder's "Pending" list jumps straight back here.
     if (this.sessionId && this.sessionData) {
       this.sessionData.lastStep = step;
       if (typeof StorageAdapter !== 'undefined') {
@@ -244,20 +261,57 @@ const BTeam = {
     }
   },
 
-  prevStep() { if (this.currentStep > 0) this.goToStep(this.currentStep - 1); },
-  nextStep() {
+  async prevStep() { if (this.currentStep > 0) await this.goToStep(this.currentStep - 1); },
+  async nextStep() {
     if (this.currentStep === 0 && !this._saveBasicInfo()) return;
-    if (this.currentStep < STEPS.length - 1) this.goToStep(this.currentStep + 1);
+    if (this.currentStep < STEPS.length - 1) await this.goToStep(this.currentStep + 1);
   },
 
-  _renderStepContent(step) {
+  // Builds the "unfinished drafts" panel markup for step 0: every locally
+  // stored session that hasn't been submitted yet (and isn't the one already
+  // loaded into this page), so more than one in-progress inspection can be
+  // found again, not just whichever one fatt_current_session last pointed at.
+  async _renderDraftsPanel() {
+    if (typeof StorageAdapter === 'undefined') return '';
+    const sessions = await StorageAdapter.listSessions();
+    const drafts = (sessions || []).filter(s => {
+      const sd = s.data || {};
+      if (sd.status === 'submitted') return false;
+      const sid = s.key.replace(/^session_/, '');
+      if (this.sessionId && sid === this.sessionId) return false;
+      return true;
+    });
+    if (drafts.length === 0) return '';
+    const lang = (window.I18n && I18n.current === 'en') ? 'en' : 'zh';
+    const draftsLabel = window.t ? window.t('bteam.unfinished_drafts') : (lang === 'en' ? 'Unfinished Drafts' : '未完成的草稿');
+    const items = drafts.map(s => {
+      const sd = s.data || {};
+      const sid = s.key.replace(/^session_/, '');
+      const name = sd.customer || sid;
+      const stepIdx = (typeof sd.lastStep === 'number' && sd.lastStep >= 0 && sd.lastStep < STEPS.length) ? sd.lastStep : 0;
+      const metaParts = [sd.inspectionDate, STEPS[stepIdx].label].filter(Boolean);
+      return `
+        <div class="draft-item" onclick="BTeam.resumeDraft('${sid}')">
+          <div>
+            <div class="draft-name">${this._esc(name)}</div>
+            <div class="draft-meta">${this._esc(metaParts.join(' · '))}</div>
+          </div>
+          <span class="draft-arrow" aria-hidden="true">→</span>
+        </div>`;
+    }).join('');
+    return `<div class="drafts-panel"><div class="drafts-title">${this._esc(draftsLabel)}</div>${items}</div>`;
+  },
+
+  async _renderStepContent(step) {
     const content = document.getElementById('stepContent');
     const stepKey = STEPS[step].key;
     if (stepKey === 'setup') {
       const d = this.sessionData || {};
       const ts = d.timestamp || this._formatTimestamp(new Date());
       const today = new Date().toISOString().split('T')[0];
+      const draftsHtml = await this._renderDraftsPanel();
       content.innerHTML = `
+        ${draftsHtml}
         <div class="step-title" data-i18n="bteam.start_new">开始新检验</div>
         <div class="step-subtitle" data-i18n="role.bteam.desc">现场拍照 · 上传照片 · 记录数据</div>
         <div class="data-form" style="margin-top:16px;">
@@ -322,9 +376,9 @@ const BTeam = {
         <input type="file" id="galleryInput" accept="image/*" multiple style="display:none" onchange="BTeam.handlePhotos(this)" />
         <div class="photo-grid" id="photoGrid"></div>
       `;
-      this._renderPhotoGrid();
+      await this._renderPhotoGrid();
     } else if (stepKey === 'measurements') {
-      content.innerHTML = this._renderMeasurements();
+      content.innerHTML = await this._renderMeasurements();
       this._attachDragHandlers();
     } else if (stepKey === 'submit') {
       content.innerHTML = `
@@ -387,13 +441,24 @@ const BTeam = {
     return assigned;
   },
 
-  _photoThumbHtml(photoId) {
-    const dataUrl = (typeof StorageAdapter !== 'undefined' && this.sessionId) ? StorageAdapter.loadImage(this.sessionId, photoId) : null;
+  _photoThumbHtml(photoId, dataUrl) {
     if (!dataUrl) return '';
     return `<div class="drag-thumb" data-photo-id="${photoId}"><img src="${dataUrl}" alt="photo" draggable="false" /></div>`;
   },
 
-  _renderMeasurements() {
+  // Resolves a batch of photoIds to data URLs in parallel via StorageAdapter
+  // (IndexedDB-backed, async) so render methods can build their HTML strings
+  // synchronously afterward instead of awaiting one image at a time.
+  async _loadImageMap(ids) {
+    const map = {};
+    if (typeof StorageAdapter === 'undefined' || !this.sessionId) return map;
+    await Promise.all(ids.map(async (id) => {
+      map[id] = await StorageAdapter.loadImage(this.sessionId, id);
+    }));
+    return map;
+  },
+
+  async _renderMeasurements() {
     const boxCount = this._ensureMeasurements();
     const allPhotoIds = this.sessionData.photos || [];
     const assigned = this._getAssignedPhotoIds();
@@ -401,6 +466,8 @@ const BTeam = {
     const lang = (window.I18n && I18n.current === 'en') ? 'en' : 'zh';
     const noPhotosText = window.t ? window.t('photo.no_photos') : (lang === 'en' ? 'No photos yet' : '暂无照片');
     const detailPlaceholder = window.t ? window.t('measure.detail_placeholder') : (lang === 'en' ? 'Add notes...' : '填写备注...');
+
+    const imgMap = await this._loadImageMap(allPhotoIds);
 
     let html = `
       <div class="step-title" data-i18n="measure.title">尺寸测量</div>
@@ -412,7 +479,7 @@ const BTeam = {
     if (poolIds.length === 0) {
       html += `<div class="pool-empty-hint">${this._esc(noPhotosText)}</div>`;
     } else {
-      poolIds.forEach(id => { html += this._photoThumbHtml(id); });
+      poolIds.forEach(id => { html += this._photoThumbHtml(id, imgMap[id]); });
     }
     html += `</div></div><div id="boxesContainer">`;
 
@@ -437,7 +504,7 @@ const BTeam = {
         if (!catData.photoIds || catData.photoIds.length === 0) {
           html += `<div class="dropzone-empty-hint">${this._esc(noPhotosText)}</div>`;
         } else {
-          catData.photoIds.forEach(id => { html += this._photoThumbHtml(id); });
+          catData.photoIds.forEach(id => { html += this._photoThumbHtml(id, imgMap[id]); });
         }
         html += `
             </div>
@@ -516,7 +583,7 @@ const BTeam = {
       lastZone = zone;
     };
 
-    const onUp = (ev) => {
+    const onUp = async (ev) => {
       document.removeEventListener('pointermove', onMove);
       document.removeEventListener('pointerup', onUp);
       document.removeEventListener('pointercancel', onUp);
@@ -528,7 +595,7 @@ const BTeam = {
       if (target) {
         const toBox = target.dataset.box || null;
         const toCat = target.dataset.cat || null;
-        this._movePhoto(photoId, originBox, originCat, toBox, toCat);
+        await this._movePhoto(photoId, originBox, originCat, toBox, toCat);
       }
     };
 
@@ -537,7 +604,7 @@ const BTeam = {
     document.addEventListener('pointercancel', onUp);
   },
 
-  _movePhoto(photoId, fromBox, fromCat, toBox, toCat) {
+  async _movePhoto(photoId, fromBox, fromCat, toBox, toCat) {
     if (fromBox === toBox && fromCat === toCat) return;
     if (fromBox && fromCat && this.sessionData.measurements && this.sessionData.measurements.boxes[fromBox] && this.sessionData.measurements.boxes[fromBox][fromCat]) {
       const src = this.sessionData.measurements.boxes[fromBox][fromCat];
@@ -551,9 +618,9 @@ const BTeam = {
       if (!dest.photoIds.includes(photoId)) dest.photoIds.push(photoId);
     }
     if (typeof StorageAdapter !== 'undefined' && this.sessionId) {
-      StorageAdapter.saveSession(this.sessionId, this.sessionData);
+      await StorageAdapter.saveSession(this.sessionId, this.sessionData);
     }
-    this._renderStepContent(this.currentStep);
+    await this._renderStepContent(this.currentStep);
   },
 
   handlePhotos(input) {
@@ -562,12 +629,12 @@ const BTeam = {
     if (!this.sessionData.photos) this.sessionData.photos = [];
     files.forEach((file) => {
       const reader = new FileReader();
-      reader.onload = (e) => {
+      reader.onload = async (e) => {
         const photoId = 'photo_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
         this.sessionData.photos.push(photoId);
         if (typeof StorageAdapter !== 'undefined' && this.sessionId) {
-          StorageAdapter.saveImage(this.sessionId, photoId, e.target.result);
-          StorageAdapter.saveSession(this.sessionId, this.sessionData);
+          await StorageAdapter.saveImage(this.sessionId, photoId, e.target.result);
+          await StorageAdapter.saveSession(this.sessionId, this.sessionData);
         }
         this._addPhotoToGrid(photoId, e.target.result);
       };
@@ -586,18 +653,19 @@ const BTeam = {
     grid.appendChild(div);
   },
 
-  _renderPhotoGrid() {
+  async _renderPhotoGrid() {
     const grid = document.getElementById('photoGrid');
     if (!grid) return;
     grid.innerHTML = '';
     const photos = (this.sessionData && this.sessionData.photos) || [];
+    const imgMap = await this._loadImageMap(photos);
     photos.forEach(photoId => {
-      const dataUrl = (typeof StorageAdapter !== 'undefined' && this.sessionId) ? StorageAdapter.loadImage(this.sessionId, photoId) : null;
+      const dataUrl = imgMap[photoId];
       if (dataUrl) this._addPhotoToGrid(photoId, dataUrl);
     });
   },
 
-  removePhoto(photoId) {
+  async removePhoto(photoId) {
     const lang = (window.I18n && I18n.current === 'en') ? 'en' : 'zh';
     const confirmMsg = window.t ? window.t('photo.delete_confirm') : (lang === 'en' ? 'Delete this photo?' : '确定删除这张照片？');
     if (!confirm(confirmMsg)) return;
@@ -615,8 +683,8 @@ const BTeam = {
         });
       }
       if (typeof StorageAdapter !== 'undefined' && this.sessionId) {
-        StorageAdapter.saveSession(this.sessionId, this.sessionData);
-        localStorage.removeItem('fatt_img_' + this.sessionId + '_' + photoId);
+        await StorageAdapter.saveSession(this.sessionId, this.sessionData);
+        await StorageAdapter.removeImage(this.sessionId, photoId);
       }
     }
     const el = document.querySelector(`.photo-item[data-photo-id="${photoId}"]`);
@@ -629,6 +697,13 @@ const BTeam = {
     this.sessionData.submittedAt = Date.now();
     if (typeof StorageAdapter !== 'undefined') {
       StorageAdapter.saveSession(this.sessionId, this.sessionData).then(() => {
+        // Release B Team's hold on this draft now that it's been submitted —
+        // without this, fatt_current_session would keep pointing at a session
+        // that's now locked out of resume (status==='submitted'), and it would
+        // also keep this inspection out of the step-0 drafts list incorrectly
+        // (it's correctly excluded there anyway, but clearing the pointer is
+        // the clean way to signal "no draft in progress" going forward).
+        localStorage.removeItem('fatt_current_session');
         alert(window.t ? window.t('msg.session_created') : 'Submitted!');
         window.location.href = '../index.html';
       });
