@@ -3,10 +3,21 @@
    ============================================ */
 
 .report-page {
+  /* The report is a white paper document (screen, and the exported PDF), so it
+     carries its own light palette instead of inheriting the app's dark theme. */
+  --text-primary: #111827;
+  --text-secondary: #4b5563;
+  --text-tertiary: #6b7280;
+  --bg-secondary: #f3f4f6;
+  --bg-tertiary: #e5e7eb;
+  --bg-card: #ffffff;
+  --border: #d1d5db;
+  --border-strong: #9ca3af;
   max-width: 960px;
   margin: 0 auto;
   padding: var(--space-5);
   background: white;
+  color: var(--text-primary);
 }
 
 @media print {
@@ -585,4 +596,30 @@
     width: 100%;
     text-align: left;
   }
+}
+
+/* Measurement photos + notes (rendered by assets/js/report.js) */
+.report-box-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin: var(--space-4) 0 var(--space-2);
+  color: var(--text-primary);
+}
+
+.report-detail {
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: var(--space-2);
+  white-space: normal;
+  word-break: break-word;
+}
+
+.report-photo-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+@media (max-width: 700px) {
+  .report-photo-grid { grid-template-columns: repeat(2, 1fr); }
 }
