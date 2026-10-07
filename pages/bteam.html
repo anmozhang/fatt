@@ -83,7 +83,6 @@
           <select class="form-control" id="typeInput">
             <option value="psi" data-i18n="form.type.psi">PSI 生产检验</option>
             <option value="sample" data-i18n="form.type.sample">Sample 样品检验</option>
-            <option value="final" data-i18n="form.type.final">Final 最终检验</option>
           </select>
         </div>
         <div class="form-group">
@@ -352,7 +351,6 @@ const BTeam = {
             <select class="form-control" id="typeInput">
               <option value="psi" data-i18n="form.type.psi" ${(!d.type || d.type === 'psi') ? 'selected' : ''}>PSI 生产检验</option>
               <option value="sample" data-i18n="form.type.sample" ${d.type === 'sample' ? 'selected' : ''}>Sample 样品检验</option>
-              <option value="final" data-i18n="form.type.final" ${d.type === 'final' ? 'selected' : ''}>Final 最终检验</option>
             </select>
           </div>
           <div class="form-group">
