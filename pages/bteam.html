@@ -51,8 +51,8 @@
           <div class="form-control" id="timestampDisplay" style="display:flex;align-items:center;color:#888;background:rgba(255,255,255,0.03);">--</div>
         </div>
         <div class="form-group">
-          <label class="form-label" data-i18n="form.customer">客户</label>
-          <input class="form-control" id="customerInput" type="text" data-i18n-placeholder="form.customer.placeholder" placeholder="例如：Modway" />
+          <label class="form-label" data-i18n="form.customer">客户代码 (Customer Code)</label>
+          <input class="form-control" id="customerInput" type="text" data-i18n-placeholder="form.customer.placeholder" placeholder="e.g. NO1" />
         </div>
         <div class="form-group">
           <label class="form-label" data-i18n="form.inspection_date">检验日期</label>
@@ -60,7 +60,7 @@
         </div>
         <div class="form-group">
           <label class="form-label" data-i18n="form.pi">PI 单号 (Proforma Invoice)</label>
-          <input class="form-control" id="piInput" type="text" data-i18n-placeholder="form.pi.placeholder" placeholder="例如：0018541" />
+          <input class="form-control" id="piInput" type="text" data-i18n-placeholder="form.pi.placeholder" placeholder="e.g. PI001" />
         </div>
         <div class="form-group">
           <label class="form-label" data-i18n="form.batch">批次</label>
@@ -72,11 +72,11 @@
         </div>
         <div class="form-group">
           <label class="form-label" data-i18n="form.version">版本</label>
-          <input class="form-control" id="versionInput" type="text" data-i18n-placeholder="form.version.placeholder" placeholder="例如：NAT" />
+          <input class="form-control" id="versionInput" type="text" data-i18n-placeholder="form.version.placeholder" placeholder="e.g. 001" />
         </div>
         <div class="form-group">
           <label class="form-label" data-i18n="form.color">颜色</label>
-          <input class="form-control" id="colorInput" type="text" data-i18n-placeholder="form.color.placeholder" placeholder="例如：Natural" />
+          <input class="form-control" id="colorInput" type="text" data-i18n-placeholder="form.color.placeholder" placeholder="e.g. White" />
         </div>
         <div class="form-group">
           <label class="form-label" data-i18n="form.type">检验类型</label>
@@ -319,8 +319,8 @@ const BTeam = {
             <div class="form-control" id="timestampDisplay" style="display:flex;align-items:center;color:#888;background:rgba(255,255,255,0.03);">${this._esc(ts)}</div>
           </div>
           <div class="form-group">
-            <label class="form-label" data-i18n="form.customer">客户</label>
-            <input class="form-control" id="customerInput" type="text" data-i18n-placeholder="form.customer.placeholder" placeholder="例如：Modway" value="${this._esc(d.customer || '')}" />
+            <label class="form-label" data-i18n="form.customer">客户代码 (Customer Code)</label>
+            <input class="form-control" id="customerInput" type="text" data-i18n-placeholder="form.customer.placeholder" placeholder="e.g. NO1" value="${this._esc(d.customer || '')}" />
           </div>
           <div class="form-group">
             <label class="form-label" data-i18n="form.inspection_date">检验日期</label>
@@ -328,7 +328,7 @@ const BTeam = {
           </div>
           <div class="form-group">
             <label class="form-label" data-i18n="form.pi">PI 单号 (Proforma Invoice)</label>
-            <input class="form-control" id="piInput" type="text" data-i18n-placeholder="form.pi.placeholder" placeholder="例如：0018541" value="${this._esc(d.pi || '')}" />
+            <input class="form-control" id="piInput" type="text" data-i18n-placeholder="form.pi.placeholder" placeholder="e.g. PI001" value="${this._esc(d.pi || '')}" />
           </div>
           <div class="form-group">
             <label class="form-label" data-i18n="form.batch">批次</label>
@@ -340,11 +340,11 @@ const BTeam = {
           </div>
           <div class="form-group">
             <label class="form-label" data-i18n="form.version">版本</label>
-            <input class="form-control" id="versionInput" type="text" data-i18n-placeholder="form.version.placeholder" placeholder="例如：NAT" value="${this._esc(d.version || '')}" />
+            <input class="form-control" id="versionInput" type="text" data-i18n-placeholder="form.version.placeholder" placeholder="e.g. 001" value="${this._esc(d.version || '')}" />
           </div>
           <div class="form-group">
             <label class="form-label" data-i18n="form.color">颜色</label>
-            <input class="form-control" id="colorInput" type="text" data-i18n-placeholder="form.color.placeholder" placeholder="例如：Natural" value="${this._esc(d.color || '')}" />
+            <input class="form-control" id="colorInput" type="text" data-i18n-placeholder="form.color.placeholder" placeholder="e.g. White" value="${this._esc(d.color || '')}" />
           </div>
           <div class="form-group">
             <label class="form-label" data-i18n="form.type">检验类型</label>
@@ -383,7 +383,7 @@ const BTeam = {
         <div class="step-title">提交检验</div>
         <div class="aql-panel" style="margin-top:16px;">
           <div class="aql-row"><span class="aql-label" data-i18n="form.timestamp">提交时间</span><span class="aql-value" id="sum-timestamp">-</span></div>
-          <div class="aql-row"><span class="aql-label" data-i18n="form.customer">客户</span><span class="aql-value" id="sum-customer">-</span></div>
+          <div class="aql-row"><span class="aql-label" data-i18n="form.customer">客户代码</span><span class="aql-value" id="sum-customer">-</span></div>
           <div class="aql-row"><span class="aql-label" data-i18n="form.inspection_date">检验日期</span><span class="aql-value" id="sum-date">-</span></div>
           <div class="aql-row"><span class="aql-label" data-i18n="form.pi">PI 单号</span><span class="aql-value" id="sum-pi">-</span></div>
           <div class="aql-row"><span class="aql-label" data-i18n="form.batch">批次</span><span class="aql-value" id="sum-batch">-</span></div>
