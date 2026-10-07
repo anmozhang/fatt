@@ -109,11 +109,17 @@
 <script src="../assets/js/storage/storage-adapter.js"></script>
 <script>
 const STEPS = [
-  { key: 'setup', label: '基本信息' },
-  { key: 'photos', label: '拍照上传' },
-  { key: 'measurements', label: '尺寸测量' },
-  { key: 'submit', label: '提交' }
+  { key: 'setup', i18n: 'bteam.step.setup', label: '基本信息' },
+  { key: 'photos', i18n: 'bteam.step.photos', label: '拍照上传' },
+  { key: 'measurements', i18n: 'bteam.step.measurements', label: '尺寸测量' },
+  { key: 'submit', i18n: 'bteam.step.submit', label: '提交' }
 ];
+
+// Step name in the current UI language (falls back to the Chinese label).
+function stepLabel(i) {
+  const s = STEPS[i];
+  return (window.t && s.i18n) ? window.t(s.i18n) : s.label;
+}
 
 const MEASURE_CATEGORIES = [
   { key: 'carton_dimension_weight', zh: '箱体尺寸与重量', en: 'Dimension Carton & Weight' },
@@ -133,6 +139,11 @@ const BTeam = {
 
   async init() {
     this._renderSteps();
+    // I18n only re-labels [data-i18n] nodes; the "Step n of N" text is built
+    // from a template, so refresh it when the language is switched.
+    document.querySelectorAll('.lang-btn').forEach(btn => {
+      btn.addEventListener('click', () => setTimeout(() => this._updateNavInfo(), 0));
+    });
     // Set default date
     const dateInput = document.getElementById('inspectionDate');
     if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
@@ -158,7 +169,7 @@ const BTeam = {
     nav.innerHTML = STEPS.map((s, i) => `
       <div class="step-item ${i === 0 ? 'active' : ''}" data-step="${i}" onclick="BTeam.goToStep(${i})">
         <span class="step-num">${i + 1}</span>
-        <span>${s.label}</span>
+        <span data-i18n="${s.i18n}">${stepLabel(i)}</span>
       </div>
     `).join('');
   },
@@ -240,6 +251,13 @@ const BTeam = {
     if (this._saveBasicInfo()) await this.goToStep(1);
   },
 
+  _updateNavInfo() {
+    const el = document.getElementById('navInfo');
+    if (!el) return;
+    const n = this.currentStep + 1;
+    el.textContent = window.t ? window.t('bteam.step_of', { n, total: STEPS.length }) : `Step ${n} of ${STEPS.length}`;
+  },
+
   async goToStep(step) {
     if (step < 0 || step >= STEPS.length) return;
     this.currentStep = step;
@@ -247,7 +265,7 @@ const BTeam = {
       el.classList.toggle('active', i === step);
       if (i < step) el.classList.add('done');
     });
-    document.getElementById('navInfo').textContent = `Step ${step + 1} of ${STEPS.length}`;
+    this._updateNavInfo();
     document.getElementById('prevBtn').style.opacity = step === 0 ? '0.3' : '1';
     await this._renderStepContent(step);
     // Remember progress so leaving via Home and resuming from the drafts
@@ -288,17 +306,18 @@ const BTeam = {
       const sid = s.key.replace(/^session_/, '');
       const name = sd.customer || sid;
       const stepIdx = (typeof sd.lastStep === 'number' && sd.lastStep >= 0 && sd.lastStep < STEPS.length) ? sd.lastStep : 0;
-      const metaParts = [sd.inspectionDate, STEPS[stepIdx].label].filter(Boolean);
+      const stepSpan = `<span data-i18n="${STEPS[stepIdx].i18n}">${this._esc(stepLabel(stepIdx))}</span>`;
+      const metaHtml = [sd.inspectionDate ? this._esc(sd.inspectionDate) : '', stepSpan].filter(Boolean).join(' · ');
       return `
         <div class="draft-item" onclick="BTeam.resumeDraft('${sid}')">
           <div>
             <div class="draft-name">${this._esc(name)}</div>
-            <div class="draft-meta">${this._esc(metaParts.join(' · '))}</div>
+            <div class="draft-meta">${metaHtml}</div>
           </div>
           <span class="draft-arrow" aria-hidden="true">→</span>
         </div>`;
     }).join('');
-    return `<div class="drafts-panel"><div class="drafts-title">${this._esc(draftsLabel)}</div>${items}</div>`;
+    return `<div class="drafts-panel"><div class="drafts-title" data-i18n="bteam.unfinished_drafts">${this._esc(draftsLabel)}</div>${items}</div>`;
   },
 
   async _renderStepContent(step) {
@@ -369,7 +388,7 @@ const BTeam = {
           </button>
           <button class="btn btn-ghost w-full" onclick="document.getElementById('galleryInput').click()" data-i18n="photo.upload">从相册选择</button>
         </div>
-        <div class="upload-zone-hint" style="text-align:center;margin-top:8px;">支持 JPG, PNG，每张最大 5MB</div>
+        <div class="upload-zone-hint" style="text-align:center;margin-top:8px;" data-i18n="photo.hint">支持 JPG, PNG，每张最大 5MB</div>
         <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none" onchange="BTeam.handlePhotos(this)" />
         <input type="file" id="galleryInput" accept="image/*" multiple style="display:none" onchange="BTeam.handlePhotos(this)" />
         <div class="photo-grid" id="photoGrid"></div>
@@ -380,7 +399,7 @@ const BTeam = {
       this._attachDragHandlers();
     } else if (stepKey === 'submit') {
       content.innerHTML = `
-        <div class="step-title">提交检验</div>
+        <div class="step-title" data-i18n="bteam.submit_title">提交检验</div>
         <div class="aql-panel" style="margin-top:16px;">
           <div class="aql-row"><span class="aql-label" data-i18n="form.timestamp">提交时间</span><span class="aql-value" id="sum-timestamp">-</span></div>
           <div class="aql-row"><span class="aql-label" data-i18n="form.customer">客户代码</span><span class="aql-value" id="sum-customer">-</span></div>
@@ -408,7 +427,7 @@ const BTeam = {
         document.getElementById('sum-boxcount').textContent = this.sessionData.boxCount || '-';
       }
     } else {
-      content.innerHTML = `<div class="step-title">${STEPS[step].label}</div><p style="color:#666;font-size:13px;margin-top:8px;">此步骤功能开发中...</p>`;
+      content.innerHTML = `<div class="step-title">${stepLabel(step)}</div><p style="color:#666;font-size:13px;margin-top:8px;">此步骤功能开发中...</p>`;
     }
     if (window.I18n) I18n.apply();
   },
