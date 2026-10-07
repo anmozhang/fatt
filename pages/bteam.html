@@ -569,11 +569,27 @@ const BTeam = {
     const offsetY = e.clientY - rect.top;
     let lastZone = null;
 
-    const onMove = (ev) => {
-      ghost.style.left = (ev.clientX - offsetX) + 'px';
-      ghost.style.top = (ev.clientY - offsetY) + 'px';
+    // --- Edge auto-scroll -------------------------------------------------
+    // While a thumbnail is being dragged the browser's own touch scrolling is
+    // off (touch-action:none on .drag-thumb), so the page can't be scrolled by
+    // hand. Instead, when the finger gets within EDGE_PX of the top/bottom of
+    // the visible area, scroll automatically; the closer to the edge, the
+    // faster. The drop target is re-evaluated every frame because content
+    // moves under a stationary finger.
+    // Which element scrolls depends on the layout: on phones the whole page
+    // (window) scrolls, on larger screens #stepContent may be its own scroll
+    // container. Pick whichever can actually scroll at the moment.
+    const stepContent = document.getElementById('stepContent');
+    const EDGE_PX = 70;      // size of the hot zone at each edge
+    const MAX_SPEED = 18;    // px per frame at the very edge (~1000px/s)
+    let lastX = e.clientX, lastY = e.clientY;
+    let scrollRaf = null;
+
+    const innerScrolls = () => !!stepContent && stepContent.scrollHeight > stepContent.clientHeight + 1;
+
+    const updateDropZone = () => {
       ghost.style.display = 'none';
-      const under = document.elementFromPoint(ev.clientX, ev.clientY);
+      const under = document.elementFromPoint(lastX, lastY);
       ghost.style.display = '';
       const zone = under ? under.closest('[data-role]') : null;
       if (lastZone && lastZone !== zone) lastZone.classList.remove('drag-over');
@@ -581,10 +597,59 @@ const BTeam = {
       lastZone = zone;
     };
 
+    const scrollSpeed = () => {
+      let top = 0, bottom = window.innerHeight;
+      if (innerScrolls()) {
+        const r = stepContent.getBoundingClientRect();
+        top = Math.max(r.top, 0);
+        bottom = Math.min(r.bottom, window.innerHeight);
+      }
+      if (lastY < top + EDGE_PX) {
+        return -MAX_SPEED * Math.min(1, (top + EDGE_PX - lastY) / EDGE_PX);
+      }
+      if (lastY > bottom - EDGE_PX) {
+        return MAX_SPEED * Math.min(1, (lastY - (bottom - EDGE_PX)) / EDGE_PX);
+      }
+      return 0;
+    };
+
+    // Returns true if the view actually moved.
+    const scrollByAmount = (dy) => {
+      if (innerScrolls()) {
+        const before = stepContent.scrollTop;
+        stepContent.scrollTop = before + dy;
+        if (stepContent.scrollTop !== before) return true;
+      }
+      const beforeY = window.scrollY;
+      window.scrollBy(0, dy);
+      return window.scrollY !== beforeY;
+    };
+
+    const autoScrollTick = () => {
+      scrollRaf = null;
+      const v = scrollSpeed();
+      if (v !== 0) {
+        if (scrollByAmount(v)) updateDropZone();
+        scrollRaf = requestAnimationFrame(autoScrollTick);
+      }
+    };
+
+    const onMove = (ev) => {
+      lastX = ev.clientX;
+      lastY = ev.clientY;
+      ghost.style.left = (lastX - offsetX) + 'px';
+      ghost.style.top = (lastY - offsetY) + 'px';
+      updateDropZone();
+      if (scrollRaf === null && scrollSpeed() !== 0) {
+        scrollRaf = requestAnimationFrame(autoScrollTick);
+      }
+    };
+
     const onUp = async (ev) => {
       document.removeEventListener('pointermove', onMove);
       document.removeEventListener('pointerup', onUp);
       document.removeEventListener('pointercancel', onUp);
+      if (scrollRaf !== null) { cancelAnimationFrame(scrollRaf); scrollRaf = null; }
       ghost.remove();
       el.style.opacity = '';
       if (lastZone) lastZone.classList.remove('drag-over');
