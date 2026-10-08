@@ -171,7 +171,7 @@ function findSession(key) { return allSessions.find(s => s.key === key); }
 // "session_"); bteam.html wants the bare sessionId in fatt_current_session.
 function resumeDraft(key) {
   localStorage.setItem('fatt_current_session', key.replace(/^session_/, ''));
-  window.location.href = 'bteam.html';
+  window.location.href = 'bteam.html?resume=' + encodeURIComponent(key.replace(/^session_/, ''));
 }
 function openReport(key) { window.location.href = 'report.html?session=' + encodeURIComponent(key); }
 

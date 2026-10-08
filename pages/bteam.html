@@ -109,7 +109,7 @@
           <label class="form-label" data-i18n="form.supplier">供应商 (Supplier)</label>
           <div class="form-control" id="supplierDisplay" style="display:flex;align-items:center;color:#aaa;background:rgba(255,255,255,0.03);">Decor Trend Industries Sdn Bhd</div>
         </div>
-        <button class="btn btn-primary w-full" onclick="BTeam.createSession()" data-i18n="bteam.start_new">开始新检验</button>
+        <button class="btn btn-primary w-full" onclick="BTeam.createSession()" data-i18n="bteam.save_continue">保存并继续</button>
       </div>
     </div>
   </div>
@@ -165,6 +165,7 @@ const DIM_FIELDS = ['length', 'height', 'width', 'weight'];
 
 const BTeam = {
   currentStep: 0,
+  listMode: false,
   sessionId: null,
   sessionData: {},
   _expandedBoxes: new Set(),
@@ -178,7 +179,8 @@ const BTeam = {
         this._updateNavInfo();
         // Category names on the measurements step are built per language at
         // render time, so rebuild that step (its inputs save on every keystroke).
-        if (this.currentStep === 2) this._renderStepContent(2);
+        if (this.listMode) this._renderHome();
+        else if (this.currentStep === 2) this._renderStepContent(2);
       }, 0));
     });
     // Set default date
@@ -187,13 +189,84 @@ const BTeam = {
     // Auto-fill submission timestamp (read-only, informational)
     const tsDisplay = document.getElementById('timestampDisplay');
     if (tsDisplay) tsDisplay.textContent = this._formatTimestamp(new Date());
-    const resumed = await this._checkExistingSession();
-    if (!resumed) {
-      // Nothing to resume: render step 0 dynamically so the "unfinished
-      // drafts" list (if any) shows up on first load too, not just when
-      // navigating back to step 0 later.
-      await this.goToStep(0);
+    // Entry points:
+    //  - ?resume=<sessionId>  Customer List -> Pending: open that draft
+    //  - ?list=1              home screen "Get Start": show the unfinished drafts
+    //  - neither              page reload mid-inspection: restore the current draft
+    const params = new URLSearchParams(window.location.search);
+    const resumeId = params.get('resume');
+    const wantList = params.get('list') === '1';
+    if (wantList) localStorage.removeItem('fatt_current_session');
+    if (resumeId) localStorage.setItem('fatt_current_session', resumeId);
+    let resumed = false;
+    if (!wantList) {
+      resumed = await this._checkExistingSession();
+      if (resumed) this._cleanUrl();
     }
+    if (!resumed) await this.showHome();
+  },
+
+  // Drop ?list= / ?resume= so a later reload restores the open draft instead
+  _cleanUrl() {
+    try {
+      const u = new URL(window.location.href);
+      u.searchParams.delete('list');
+      u.searchParams.delete('resume');
+      window.history.replaceState(null, '', u.pathname + (u.search || '') + u.hash);
+    } catch (e) { /* file:// or sandboxed: harmless */ }
+  },
+
+  // Chrome (steps, session bar, Previous/Next) is hidden while the drafts list shows.
+  _setChrome(visible) {
+    ['.session-bar', '#stepsNav', '.bottom-nav'].forEach(sel => {
+      const el = document.querySelector(sel);
+      if (el) el.style.display = visible ? '' : 'none';
+    });
+  },
+
+  async _loadDrafts() {
+    if (typeof StorageAdapter === 'undefined') return [];
+    const sessions = (await StorageAdapter.listSessions()) || [];
+    return sessions
+      .filter(s => s && s.data && s.data.status !== 'submitted' && s.data.status !== 'approved')
+      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  },
+
+  // Get Start home: every unfinished file + "Start New Inspection".
+  // With no unfinished files it goes straight to a blank form.
+  async showHome() {
+    const drafts = await this._loadDrafts();
+    if (drafts.length === 0) { await this.startNew(); return; }
+    this.listMode = true;
+    this.sessionId = null;
+    this.sessionData = {};
+    localStorage.removeItem('fatt_current_session');
+    this._setChrome(false);
+    await this._renderHome(drafts);
+  },
+
+  async _renderHome(drafts) {
+    drafts = drafts || await this._loadDrafts();
+    const panel = this._draftsHtml(drafts);
+    document.getElementById('stepContent').innerHTML = `
+      ${panel}
+      <button class="btn btn-primary w-full" style="margin-top:4px;" onclick="BTeam.startNew()" data-i18n="bteam.start_new">开始新检验</button>`;
+    if (window.I18n) I18n.apply();
+  },
+
+  // Blank form for a brand-new file; the existing drafts are left untouched.
+  async startNew() {
+    this.listMode = false;
+    this.sessionId = null;
+    this.sessionData = {};
+    this._expandedBoxes = new Set();
+    localStorage.removeItem('fatt_current_session');
+    this._cleanUrl();
+    this._setChrome(true);
+    document.getElementById('sessionName').textContent = '--';
+    this.currentStep = 0;
+    document.querySelectorAll('.step-item').forEach((el, i) => { el.classList.toggle('active', i === 0); el.classList.remove('done'); });
+    await this.goToStep(0);
   },
 
   _formatTimestamp(d) {
@@ -247,7 +320,11 @@ const BTeam = {
   // reach an earlier draft.
   async resumeDraft(sessionId) {
     localStorage.setItem('fatt_current_session', sessionId);
-    await this._checkExistingSession();
+    this.listMode = false;
+    this._cleanUrl();
+    this._setChrome(true);
+    const ok = await this._checkExistingSession();
+    if (!ok) await this.showHome();
   },
 
   _esc(str) {
@@ -330,23 +407,16 @@ const BTeam = {
   // stored session that hasn't been submitted yet (and isn't the one already
   // loaded into this page), so more than one in-progress inspection can be
   // found again, not just whichever one fatt_current_session last pointed at.
-  async _renderDraftsPanel() {
-    if (typeof StorageAdapter === 'undefined') return '';
-    const sessions = await StorageAdapter.listSessions();
-    const drafts = (sessions || []).filter(s => {
-      const sd = s.data || {};
-      if (sd.status === 'submitted') return false;
-      const sid = s.key.replace(/^session_/, '');
-      if (this.sessionId && sid === this.sessionId) return false;
-      return true;
-    });
-    if (drafts.length === 0) return '';
+  _draftsHtml(drafts) {
+    if (!drafts || drafts.length === 0) return '';
     const lang = (window.I18n && I18n.current === 'en') ? 'en' : 'zh';
     const draftsLabel = window.t ? window.t('bteam.unfinished_drafts') : (lang === 'en' ? 'Unfinished Drafts' : '未完成的草稿');
+    const untitled = window.t ? window.t('customer.untitled') : '(No customer code)';
     const items = drafts.map(s => {
       const sd = s.data || {};
       const sid = s.key.replace(/^session_/, '');
-      const name = sd.customer || sid;
+      const code = (sd.customer || '').trim();
+      const name = (code || untitled) + ' - ' + (sd.type === 'sample' ? 'Sample' : 'PSI');
       const stepIdx = (typeof sd.lastStep === 'number' && sd.lastStep >= 0 && sd.lastStep < STEPS.length) ? sd.lastStep : 0;
       const stepSpan = `<span data-i18n="${STEPS[stepIdx].i18n}">${this._esc(stepLabel(stepIdx))}</span>`;
       const metaHtml = [sd.inspectionDate ? this._esc(sd.inspectionDate) : '', stepSpan].filter(Boolean).join(' · ');
@@ -369,9 +439,7 @@ const BTeam = {
       const d = this.sessionData || {};
       const ts = d.timestamp || this._formatTimestamp(new Date());
       const today = new Date().toISOString().split('T')[0];
-      const draftsHtml = await this._renderDraftsPanel();
       content.innerHTML = `
-        ${draftsHtml}
         <div class="step-title" data-i18n="bteam.start_new">开始新检验</div>
         <div class="step-subtitle" data-i18n="role.bteam.desc">现场拍照 · 上传照片 · 记录数据</div>
         <div class="data-form" style="margin-top:16px;">
@@ -438,7 +506,7 @@ const BTeam = {
             <label class="form-label" data-i18n="form.supplier">供应商 (Supplier)</label>
             <div class="form-control" id="supplierDisplay" style="display:flex;align-items:center;color:#aaa;background:rgba(255,255,255,0.03);">${SUPPLIER_NAME}</div>
           </div>
-          <button class="btn btn-primary w-full" onclick="BTeam.createSession()" data-i18n="bteam.start_new">开始新检验</button>
+          <button class="btn btn-primary w-full" onclick="BTeam.createSession()" data-i18n="bteam.save_continue">保存并继续</button>
         </div>
       `;
     } else if (stepKey === 'photos') {
