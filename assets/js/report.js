@@ -15,6 +15,9 @@ const MEASURE_CATEGORIES = [
   { key: 'warning_label', zh: '警告标签', en: 'Warning Label' }
 ];
 
+// Supplier is fixed for this deployment; older records saved before the field existed show it too.
+const SUPPLIER_NAME = 'Decor Trend Industries Sdn Bhd';
+
 const Report = {
   sessionKey: null,
   data: null,
@@ -123,8 +126,11 @@ const Report = {
       [this._txt('PI 号', 'PI No.'), dash(d.pi), this._txt('批次', 'Batch'), dash(d.batch)],
       [this._txt('型号', 'Model'), dash(d.model), this._txt('版本', 'Version'), dash(d.version)],
       [this._txt('颜色', 'Color'), dash(d.color), this._txt('检验类型', 'Inspection Type'), dash(typeText)],
-      [this._txt('箱数', 'Box Count'), dash(d.boxCount), this._txt('提交时间', 'Submitted'), dash(d.timestamp)]
-    ].map(r => '<tr><td>' + r[0] + '</td><td>' + r[1] + '</td><td>' + r[2] + '</td><td>' + r[3] + '</td></tr>').join('');
+      [this._txt('箱数', 'Box Count'), dash(d.boxCount), this._txt('提交时间', 'Submitted'), dash(d.timestamp)],
+      [this._txt('检验人', 'Inspection By'), dash(d.inspectionBy), this._txt('PO 号 / 订单号', 'PO No / Order No'), dash(d.poNo)],
+      [this._txt('总数量', 'Total Quantity'), dash(d.totalQuantity), this._txt('抽样数量', 'Sample Size'), dash(d.sampleSize)]
+    ].map(r => '<tr><td>' + r[0] + '</td><td>' + r[1] + '</td><td>' + r[2] + '</td><td>' + r[3] + '</td></tr>').join('') +
+      '<tr><td>' + this._txt('供应商', 'Supplier') + '</td><td colspan="3">' + e(d.supplier || SUPPLIER_NAME) + '</td></tr>';
 
     // Measurements, grouped by box then category
     const boxes = (d.measurements && d.measurements.boxes) || {};
