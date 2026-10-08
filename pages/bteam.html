@@ -89,6 +89,26 @@
           <label class="form-label" data-i18n="form.box_count">箱数</label>
           <input class="form-control" id="boxCountInput" type="number" min="1" placeholder="1" />
         </div>
+        <div class="form-group">
+          <label class="form-label" data-i18n="form.inspection_by">检验人 (Inspection by)</label>
+          <input class="form-control" id="inspectionByInput" type="text" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" data-i18n="form.po_no">PO 号 / 订单号 (PO No / Order No)</label>
+          <input class="form-control" id="poNoInput" type="text" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" data-i18n="form.total_qty">总数量 (Total Quantity)</label>
+          <input class="form-control" id="totalQtyInput" type="number" inputmode="numeric" min="0" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" data-i18n="form.sample_size">抽样数量 (Sample size)</label>
+          <input class="form-control" id="sampleSizeInput" type="number" inputmode="numeric" min="0" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" data-i18n="form.supplier">供应商 (Supplier)</label>
+          <div class="form-control" id="supplierDisplay" style="display:flex;align-items:center;color:#aaa;background:rgba(255,255,255,0.03);">Decor Trend Industries Sdn Bhd</div>
+        </div>
         <button class="btn btn-primary w-full" onclick="BTeam.createSession()" data-i18n="bteam.start_new">开始新检验</button>
       </div>
     </div>
@@ -114,6 +134,9 @@ const STEPS = [
   { key: 'measurements', i18n: 'bteam.step.measurements', label: '尺寸测量' },
   { key: 'submit', i18n: 'bteam.step.submit', label: '提交' }
 ];
+
+// Supplier is fixed for this deployment (not editable in the form).
+const SUPPLIER_NAME = 'Decor Trend Industries Sdn Bhd';
 
 // Step name in the current UI language (falls back to the Chinese label).
 function stepLabel(i) {
@@ -234,6 +257,11 @@ const BTeam = {
       color: document.getElementById('colorInput').value.trim(),
       type: document.getElementById('typeInput').value,
       boxCount: document.getElementById('boxCountInput').value,
+      inspectionBy: document.getElementById('inspectionByInput').value.trim(),
+      poNo: document.getElementById('poNoInput').value.trim(),
+      totalQuantity: document.getElementById('totalQtyInput').value,
+      sampleSize: document.getElementById('sampleSizeInput').value,
+      supplier: SUPPLIER_NAME,
       timestamp: existing.timestamp || this._formatTimestamp(now),
       status: existing.status || 'in_progress',
       photos: existing.photos || [],
@@ -376,6 +404,26 @@ const BTeam = {
             <label class="form-label" data-i18n="form.box_count">箱数</label>
             <input class="form-control" id="boxCountInput" type="number" min="1" placeholder="1" value="${this._esc(d.boxCount || '')}" />
           </div>
+          <div class="form-group">
+            <label class="form-label" data-i18n="form.inspection_by">检验人 (Inspection by)</label>
+            <input class="form-control" id="inspectionByInput" type="text" value="${this._esc(d.inspectionBy || '')}" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" data-i18n="form.po_no">PO 号 / 订单号 (PO No / Order No)</label>
+            <input class="form-control" id="poNoInput" type="text" value="${this._esc(d.poNo || '')}" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" data-i18n="form.total_qty">总数量 (Total Quantity)</label>
+            <input class="form-control" id="totalQtyInput" type="number" inputmode="numeric" min="0" value="${this._esc(d.totalQuantity || '')}" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" data-i18n="form.sample_size">抽样数量 (Sample size)</label>
+            <input class="form-control" id="sampleSizeInput" type="number" inputmode="numeric" min="0" value="${this._esc(d.sampleSize || '')}" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" data-i18n="form.supplier">供应商 (Supplier)</label>
+            <div class="form-control" id="supplierDisplay" style="display:flex;align-items:center;color:#aaa;background:rgba(255,255,255,0.03);">${SUPPLIER_NAME}</div>
+          </div>
           <button class="btn btn-primary w-full" onclick="BTeam.createSession()" data-i18n="bteam.start_new">开始新检验</button>
         </div>
       `;
@@ -411,6 +459,11 @@ const BTeam = {
           <div class="aql-row"><span class="aql-label" data-i18n="form.color">颜色</span><span class="aql-value" id="sum-color">-</span></div>
           <div class="aql-row"><span class="aql-label" data-i18n="form.type">检验类型</span><span class="aql-value" id="sum-type">-</span></div>
           <div class="aql-row"><span class="aql-label" data-i18n="form.box_count">箱数</span><span class="aql-value" id="sum-boxcount">-</span></div>
+          <div class="aql-row"><span class="aql-label" data-i18n="form.inspection_by">检验人</span><span class="aql-value" id="sum-inspectionby">-</span></div>
+          <div class="aql-row"><span class="aql-label" data-i18n="form.po_no">PO 号 / 订单号</span><span class="aql-value" id="sum-pono">-</span></div>
+          <div class="aql-row"><span class="aql-label" data-i18n="form.total_qty">总数量</span><span class="aql-value" id="sum-totalqty">-</span></div>
+          <div class="aql-row"><span class="aql-label" data-i18n="form.sample_size">抽样数量</span><span class="aql-value" id="sum-samplesize">-</span></div>
+          <div class="aql-row"><span class="aql-label" data-i18n="form.supplier">供应商</span><span class="aql-value" id="sum-supplier">-</span></div>
         </div>
         <button class="btn btn-success w-full" style="margin-top:20px;" onclick="BTeam.submitInspection()" data-i18n="common.submit">提交检验</button>
       `;
@@ -425,6 +478,11 @@ const BTeam = {
         document.getElementById('sum-color').textContent = this.sessionData.color || '-';
         document.getElementById('sum-type').textContent = this.sessionData.type ? (window.t ? window.t('form.type.' + this.sessionData.type) : this.sessionData.type) : '-';
         document.getElementById('sum-boxcount').textContent = this.sessionData.boxCount || '-';
+        document.getElementById('sum-inspectionby').textContent = this.sessionData.inspectionBy || '-';
+        document.getElementById('sum-pono').textContent = this.sessionData.poNo || '-';
+        document.getElementById('sum-totalqty').textContent = this.sessionData.totalQuantity || '-';
+        document.getElementById('sum-samplesize').textContent = this.sessionData.sampleSize || '-';
+        document.getElementById('sum-supplier').textContent = SUPPLIER_NAME;
       }
     } else {
       content.innerHTML = `<div class="step-title">${stepLabel(step)}</div><p style="color:#666;font-size:13px;margin-top:8px;">此步骤功能开发中...</p>`;
