@@ -63,7 +63,7 @@ const LandingPage = {
   /* ---- Quick Navigate Helpers ---- */
   goToRole(role) {
     const paths = {
-      bteam: 'pages/bteam.html',
+      bteam: 'pages/bteam.html?list=1',
       customer: 'pages/customer.html'
     };
     if (paths[role]) window.location.href = paths[role];
