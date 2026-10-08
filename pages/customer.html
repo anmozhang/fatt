@@ -7,7 +7,23 @@
 <title data-i18n="customer.title">Customer Portal</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E📋%3C/text%3E%3C/svg%3E" />
 <link rel="stylesheet" href="../assets/css/main.css" />
-<link rel="stylesheet" href="../assets/css/customer.css" />
+<style>
+.cl-tabs{display:flex;gap:0;border-bottom:1px solid #333;margin-bottom:20px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.cl-tab{flex:1 1 auto;padding:10px 8px;background:none;border:none;border-bottom:2px solid transparent;color:#888;cursor:pointer;font-size:13px;white-space:nowrap}
+.cl-tab.active{border-bottom-color:#4fc3f7;color:#4fc3f7}
+.cl-count{display:inline-block;min-width:18px;margin-left:6px;padding:0 6px;border-radius:9px;background:rgba(255,255,255,0.1);font-size:11px;line-height:18px;text-align:center}
+.cl-tab.active .cl-count{background:rgba(79,195,247,0.18)}
+.cl-list{display:flex;flex-direction:column;gap:12px}
+.cl-card{cursor:pointer}
+.cl-card-row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.cl-name{font-weight:600;margin-bottom:4px;word-break:break-word}
+.cl-meta{font-size:12px;color:#888}
+.res-row{display:flex;gap:12px;margin-top:8px}
+.res-btn{flex:1;padding:14px 10px;border-radius:10px;border:2px solid #444;background:transparent;color:#ccc;font-size:16px;font-weight:700;cursor:pointer}
+.res-btn.pass.active{background:rgba(102,187,106,0.2);border-color:#66bb6a;color:#66bb6a}
+.res-btn.fail.active{background:rgba(239,83,80,0.2);border-color:#ef5350;color:#ef5350}
+.res-hint{font-size:12px;color:#888;margin-top:12px}
+</style>
 </head>
 <body class="theme-light">
 
@@ -27,118 +43,172 @@
 <main style="padding:16px;max-width:900px;margin:0 auto;">
 
   <!-- Tabs -->
-  <div style="display:flex;gap:0;border-bottom:1px solid #333;margin-bottom:20px;">
-    <button class="tab-btn active" data-tab="reports" style="padding:10px 20px;background:none;border:none;border-bottom:2px solid #4fc3f7;color:#4fc3f7;cursor:pointer;font-size:14px;" data-i18n="customer.my_reports">My Reports</button>
-    <button class="tab-btn" data-tab="feedback" style="padding:10px 20px;background:none;border:none;border-bottom:2px solid transparent;color:#888;cursor:pointer;font-size:14px;" data-i18n="customer.feedback">Feedback</button>
+  <div class="cl-tabs" id="clTabs">
+    <button class="cl-tab active" data-tab="psi"><span data-i18n="customer.tab.psi">PSI - Production</span><span class="cl-count" id="count-psi">0</span></button>
+    <button class="cl-tab" data-tab="sample"><span data-i18n="customer.tab.sample">Sample</span><span class="cl-count" id="count-sample">0</span></button>
+    <button class="cl-tab" data-tab="pending"><span data-i18n="customer.tab.pending">Pending</span><span class="cl-count" id="count-pending">0</span></button>
+    <button class="cl-tab" data-tab="feedback"><span data-i18n="customer.feedback">Feedback</span><span class="cl-count" id="count-feedback">0</span></button>
   </div>
 
-  <!-- Reports Tab -->
-  <div id="tab-reports">
-    <div id="reportList" style="display:flex;flex-direction:column;gap:12px;">
-      <div class="empty-state">
-        <div class="empty-state-icon">📋</div>
-        <div class="empty-state-text" data-i18n="msg.no_data">No data</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Feedback Tab -->
-  <div id="tab-feedback" style="display:none;">
-    <div class="card">
-      <div class="form-group">
-        <label class="form-label" data-i18n="qc.add_comment">Add Comment</label>
-        <textarea class="form-control" id="feedbackText" rows="4" data-i18n-placeholder="qc.add_comment"></textarea>
-      </div>
-      <button class="btn btn-primary" onclick="submitFeedback()" data-i18n="common.submit">Submit</button>
-    </div>
-  </div>
+  <div id="clList" class="cl-list"></div>
 
 </main>
+
+<!-- Pass / Fail picker (Feedback tab) -->
+<div class="modal-overlay" id="resultModal" style="display:none;" onclick="if(event.target===this)closeResultModal()">
+  <div class="modal">
+    <div class="modal-title" id="resultTitle"></div>
+    <div class="cl-meta" id="resultMeta"></div>
+    <div class="res-row">
+      <button class="res-btn pass" id="btnPass" onclick="setResult('pass')">Pass</button>
+      <button class="res-btn fail" id="btnFail" onclick="setResult('fail')">Fail</button>
+    </div>
+    <div class="res-hint" data-i18n="customer.result_hint">选择 Pass / Fail 后才能下载 PDF</div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeResultModal()" data-i18n="customer.close">关闭</button>
+      <button class="btn btn-primary" onclick="openCurrentReport()" data-i18n="customer.view_report">查看报告</button>
+    </div>
+  </div>
+</div>
 
 <script src="../assets/js/i18n.js"></script>
 <script src="../assets/js/storage/storage-adapter.js"></script>
 <script>
-// Tab switching
-document.querySelectorAll('.tab-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.tab-btn').forEach(b => {
-      b.style.borderBottomColor = 'transparent';
-      b.style.color = '#888';
-      b.classList.remove('active');
-    });
-    btn.style.borderBottomColor = '#4fc3f7';
-    btn.style.color = '#4fc3f7';
-    btn.classList.add('active');
-    document.querySelectorAll('[id^="tab-"]').forEach(t => t.style.display = 'none');
-    document.getElementById('tab-' + btn.dataset.tab).style.display = 'block';
-  });
-});
+let currentTab = 'psi';
+let allSessions = [];      // [{key, data, updatedAt}]
+let activeKey = null;      // session shown in the Pass/Fail modal
 
-// Load reports
 function _esc(str) {
   return String(str == null ? '' : str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+function tr(key, fallback, params) {
+  let out = window.t ? window.t(key, params) : fallback;
+  if (!out || out === key) out = fallback;
+  return out;
+}
+function isSubmitted(d) { return d && (d.status === 'submitted' || d.status === 'approved'); }
+// Old records may still carry the removed "final" type; show them with PSI.
+function typeOf(d) { return d && d.type === 'sample' ? 'sample' : 'psi'; }
+function typeLabel(t) { return t === 'sample' ? 'Sample' : 'PSI'; }
+function fmtDate(v) {
+  if (!v) return '';
+  if (typeof v === 'number') {
+    const dt = new Date(v);
+    const p = n => String(n).padStart(2, '0');
+    return dt.getFullYear() + '-' + p(dt.getMonth() + 1) + '-' + p(dt.getDate());
+  }
+  return String(v).slice(0, 10);
+}
+function submittedDate(d) { return fmtDate(d.submittedAt) || fmtDate(d.timestamp) || fmtDate(d.inspectionDate); }
+function customerName(d) { return (d.customer || '').trim(); }
+
+function resultBadge(d) {
+  if (d.result === 'pass') return '<span class="badge badge-success">Pass</span>';
+  if (d.result === 'fail') return '<span class="badge badge-danger">Fail</span>';
+  return '<span class="badge badge-muted">' + _esc(tr('customer.result_unset', 'Not set')) + '</span>';
+}
+
+function groups() {
+  const submitted = allSessions.filter(s => isSubmitted(s.data));
+  const bySubmit = (a, b) => (b.data.submittedAt || 0) - (a.data.submittedAt || 0);
+  return {
+    psi: submitted.filter(s => typeOf(s.data) === 'psi').sort(bySubmit),
+    sample: submitted.filter(s => typeOf(s.data) === 'sample').sort(bySubmit),
+    pending: allSessions.filter(s => !isSubmitted(s.data)).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)),
+    feedback: submitted.slice().sort(bySubmit)
+  };
+}
+
+function cardHtml(s, tab) {
+  const d = s.data || {};
+  const code = customerName(d);
+  const sk = _esc(s.key);
+  if (tab === 'pending') {
+    const name = (code || tr('customer.untitled', '(未填写客户代码)')) + ' - ' + typeLabel(d.type === 'sample' ? 'sample' : 'psi');
+    const edited = fmtDate(s.updatedAt);
+    return '<div class="card cl-card" onclick="resumeDraft(\'' + sk + '\')"><div class="cl-card-row"><div>' +
+      '<div class="cl-name">' + _esc(name) + '</div>' +
+      (edited ? '<div class="cl-meta">' + _esc(tr('customer.updated_on', 'Last edited: {date}', { date: edited })) + '</div>' : '') +
+      '</div><span class="badge badge-warning">' + _esc(tr('common.pending', 'Pending')) + '</span></div></div>';
+  }
+  const name = code || tr('customer.untitled', '(未填写客户代码)');
+  const dateText = tr('customer.submitted_on', 'Submitted: {date}', { date: submittedDate(d) || '-' });
+  if (tab === 'feedback') {
+    return '<div class="card cl-card" onclick="openResultModal(\'' + sk + '\')"><div class="cl-card-row"><div>' +
+      '<div class="cl-name">' + _esc(name) + ' - ' + typeLabel(typeOf(d)) + '</div>' +
+      '<div class="cl-meta">' + _esc(dateText) + '</div></div>' + resultBadge(d) + '</div></div>';
+  }
+  // PSI / Sample lists: click opens the report
+  return '<div class="card cl-card" onclick="openReport(\'' + sk + '\')"><div class="cl-card-row"><div>' +
+    '<div class="cl-name">' + _esc(name) + '</div>' +
+    '<div class="cl-meta">' + _esc(dateText) + '</div></div>' + resultBadge(d) + '</div></div>';
+}
+
+function render() {
+  const g = groups();
+  Object.keys(g).forEach(k => { const c = document.getElementById('count-' + k); if (c) c.textContent = g[k].length; });
+  document.querySelectorAll('.cl-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === currentTab));
+  const list = document.getElementById('clList');
+  const items = g[currentTab] || [];
+  list.innerHTML = items.length
+    ? items.map(s => cardHtml(s, currentTab)).join('')
+    : '<div class="empty-state"><div class="empty-state-icon">📋</div><div class="empty-state-text" data-i18n="msg.no_data">No data</div></div>';
+  if (window.I18n) I18n.apply();
+  if (activeKey) refreshModal();
+}
 
 async function loadReports() {
-  if (typeof StorageAdapter === 'undefined') return;
-  const allSessions = await StorageAdapter.listSessions();
-  const list = document.getElementById('reportList');
-  // Customer view only ever shows records that have actually been submitted
-  // by B Team (step 4's "submit") — everything else is still a draft in
-  // progress and must not be visible here. This is the logical separation
-  // the status field provides: no separate storage area, just a filter.
-  const sessions = (allSessions || []).filter(s => {
-    const data = s.data || {};
-    return data.status === 'submitted' || data.status === 'approved';
-  });
-  if (sessions.length === 0) return;
-  list.innerHTML = sessions.map(s => {
-    const data = s.data || {};
-    // Support both the B Team inspection schema (customer/inspectionDate) and
-    // the older report schema (productName/factory/date).
-    const name = data.customer || data.productName || s.key;
-    const metaParts = [data.factory, data.inspectionDate || data.date].filter(Boolean);
-    const isSubmitted = data.status === 'submitted' || data.status === 'approved';
-    const badgeClass = isSubmitted ? 'success' : 'warning';
-    const badgeKey = isSubmitted ? 'common.submitted' : 'common.pending';
-    const badgeFallback = isSubmitted ? 'Submitted' : 'Pending';
-    return `<div class="card" style="cursor:pointer;" onclick="viewReport('${s.key}', ${isSubmitted})">
-      <div style="display:flex;justify-content:space-between;align-items:start;">
-        <div>
-          <div style="font-weight:600;margin-bottom:4px;">${_esc(name)}</div>
-          <div style="font-size:12px;color:#888;">${_esc(metaParts.join(' · '))}</div>
-        </div>
-        <span class="badge badge-${badgeClass}" data-i18n="${badgeKey}">${badgeFallback}</span>
-      </div>
-    </div>`;
-  }).join('');
-  if (window.I18n) I18n.apply();
+  if (typeof StorageAdapter === 'undefined') { render(); return; }
+  try { allSessions = (await StorageAdapter.listSessions()) || []; } catch (e) { console.error(e); allSessions = []; }
+  allSessions = allSessions.filter(s => s && s.data);
+  render();
 }
 
-function viewReport(sessionKey, isSubmitted) {
-  if (!isSubmitted) {
-    // StorageAdapter.listSessions() returns keys with its own "session_"
-    // prefix stripped off only the storage prefix ("fatt_"), so the key here
-    // is "session_" + the original sessionId (which itself already starts
-    // with "session_", e.g. "session_1788508578410"). bteam.html's
-    // _checkExistingSession() expects that original sessionId in
-    // fatt_current_session (it re-adds "session_" itself when calling
-    // StorageAdapter.loadSession), so strip the one extra "session_" layer
-    // back off here before jumping back into the wizard.
-    const sessionId = sessionKey.replace(/^session_/, '');
-    localStorage.setItem('fatt_current_session', sessionId);
-    window.location.href = 'bteam.html';
-    return;
-  }
-  window.location.href = 'report.html?session=' + sessionKey;
-}
+function findSession(key) { return allSessions.find(s => s.key === key); }
 
-function submitFeedback() {
-  const text = document.getElementById('feedbackText').value;
-  if (!text.trim()) return;
-  alert(window.t ? window.t('msg.saved') : 'Saved');
-  document.getElementById('feedbackText').value = '';
+// Pending → back into the Get Start wizard. listSessions() keys carry one
+// "session_" layer on top of the sessionId (which itself starts with
+// "session_"); bteam.html wants the bare sessionId in fatt_current_session.
+function resumeDraft(key) {
+  localStorage.setItem('fatt_current_session', key.replace(/^session_/, ''));
+  window.location.href = 'bteam.html';
 }
+function openReport(key) { window.location.href = 'report.html?session=' + encodeURIComponent(key); }
+
+// Pass / Fail picker
+function openResultModal(key) {
+  activeKey = key;
+  document.getElementById('resultModal').style.display = 'flex';
+  refreshModal();
+}
+function refreshModal() {
+  const s = findSession(activeKey);
+  if (!s) return;
+  const d = s.data;
+  document.getElementById('resultTitle').textContent = (customerName(d) || tr('customer.untitled', '(未填写客户代码)')) + ' - ' + typeLabel(typeOf(d));
+  document.getElementById('resultMeta').textContent = tr('customer.submitted_on', 'Submitted: {date}', { date: submittedDate(d) || '-' });
+  document.getElementById('btnPass').classList.toggle('active', d.result === 'pass');
+  document.getElementById('btnFail').classList.toggle('active', d.result === 'fail');
+}
+function closeResultModal() { activeKey = null; document.getElementById('resultModal').style.display = 'none'; }
+async function setResult(value) {
+  const s = findSession(activeKey);
+  if (!s) return;
+  s.data.result = value;
+  s.data.resultAt = Date.now();
+  try { await StorageAdapter.saveSession(s.key.replace(/^session_/, ''), s.data); }
+  catch (e) { console.error(e); }
+  render();
+}
+function openCurrentReport() { if (activeKey) openReport(activeKey); }
+
+document.querySelectorAll('.cl-tab').forEach(btn => {
+  btn.addEventListener('click', () => { currentTab = btn.dataset.tab; render(); });
+});
+// Cards/modal are built with innerHTML, so rebuild them when the language changes.
+document.querySelectorAll('.lang-btn').forEach(btn => {
+  btn.addEventListener('click', () => setTimeout(render, 0));
+});
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', loadReports);
