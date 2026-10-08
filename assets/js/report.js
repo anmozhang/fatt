@@ -158,12 +158,14 @@ const Report = {
     if (!d) return;
     const lang = this._lang();
     const e = v => this._esc(v);
-    const dash = v => (v == null || v === '' ? '-' : e(v));
+    // Empty values print as N/A (Not Applicable)
+    const NA = 'N/A';
+    const dash = v => (v == null || String(v).trim() === '' || v === '-' ? NA : e(v));
     const typeKey = d.type ? 'form.type.' + d.type : null;
     const typeText = typeKey && window.t ? t(typeKey) : (d.type || '-');
     const date = d.inspectionDate
       ? InspectionCore.Utils.formatDate(d.inspectionDate, lang)
-      : '-';
+      : '';
 
     const resultLabel = this._resultLabel();
     const resultColor = this._result() === 'pass' ? '#2e7d32' : '#c62828';
@@ -176,7 +178,7 @@ const Report = {
       [this._txt('PI 号', 'PI No.'), dash(d.pi), this._txt('批次', 'Batch'), dash(d.batch)],
       [this._txt('型号', 'Model'), dash(d.model), this._txt('版本', 'Version'), dash(d.version)],
       [this._txt('颜色', 'Color'), dash(d.color), this._txt('检验类型', 'Inspection Type'), dash(typeText)],
-      [this._txt('箱数', 'Box Count'), dash(d.boxCount), this._txt('提交时间', 'Submitted'), dash(d.timestamp)],
+      [this._txt('箱数', 'Box Count'), dash(d.boxCount), this._txt('提交时间', 'Submitted'), dash(d.submittedAt ? new Date(d.submittedAt).toLocaleString(lang === 'zh' ? 'zh-CN' : 'en-GB', { hour12: false }) : d.timestamp)],
       [this._txt('检验人', 'Inspection By'), dash(d.inspectionBy), this._txt('PO 号 / 订单号', 'PO No / Order No'), dash(d.poNo)],
       [this._txt('总数量', 'Total Quantity'), dash(d.totalQuantity), this._txt('抽样数量', 'Sample Size'), dash(d.sampleSize)]
     ].map(r => '<tr><td>' + r[0] + '</td><td>' + r[1] + '</td><td>' + r[2] + '</td><td>' + r[3] + '</td></tr>').join('') +
@@ -185,25 +187,39 @@ const Report = {
     // Measurements: per-box categories first, then the independent sections.
     const boxes = (d.measurements && d.measurements.boxes) || {};
     const assembly = (d.measurements && d.measurements.assembly) || {};
-    const boxNums = Object.keys(boxes).sort((a, b) => Number(a) - Number(b));
+    // Every box listed in the inspection is shown, even if nothing was filled in.
+    const boxSet = new Set(Object.keys(boxes).map(Number));
+    for (let i = 1; i <= (parseInt(d.boxCount, 10) || 0); i++) boxSet.add(i);
+    const boxNums = Array.from(boxSet).sort((x, y) => x - y);
 
     const dimsHtml = entry => {
-      const dims = entry.dims || {};
-      const cells = DIM_FIELDS.filter(f => String(dims[f.key] == null ? '' : dims[f.key]).trim() !== '')
-        .map(f => '<span class="report-dim"><b>' + e(f[lang] || f.en) + ':</b> ' + e(dims[f.key]) + '</span>');
-      return cells.length ? '<div class="report-detail report-dims">' + cells.join(' &nbsp; ') + '</div>' : '';
+      const dims = (entry && entry.dims) || {};
+      const cells = DIM_FIELDS.map(f => {
+        const v = String(dims[f.key] == null ? '' : dims[f.key]).trim();
+        return '<span class="report-dim"><b>' + e(f[lang] || f.en) + ':</b> ' + (v ? e(v) : NA) + '</span>';
+      });
+      return '<div class="report-detail report-dims">' + cells.join(' &nbsp; ') + '</div>';
     };
+    const hasContent = (cat, entry) => {
+      if (!entry) return false;
+      if ((entry.photoIds || []).some(id => this.imageMap[id])) return true;
+      if ((entry.detail || '').trim()) return true;
+      const dims = entry.dims || {};
+      return !!cat.dims && DIM_FIELDS.some(f => String(dims[f.key] == null ? '' : dims[f.key]).trim() !== '');
+    };
+    // A section with no photos / measurements / notes prints N/A instead of vanishing.
     const sectionHtml = (cat, entry) => {
-      if (!entry) return '';
+      entry = entry || {};
       const hasPhotos = (entry.photoIds || []).some(id => this.imageMap[id]);
-      const dims = cat.dims ? dimsHtml(entry) : '';
       const note = (entry.detail || '').trim();
-      if (!hasPhotos && !dims && !note) return '';
+      const empty = !hasContent(cat, entry);
       return '<div class="report-section">' +
         '<div class="section-title">' + e(cat[lang] || cat.en) + '</div>' +
-        dims +
+        (cat.dims ? dimsHtml(entry) : '') +
         (note ? '<div class="report-detail">' + e(note).replace(/\n/g, '<br>') + '</div>' : '') +
         this._photoGrid(entry.photoIds) +
+        (!cat.dims && empty ? '<div class="report-detail report-na">' + NA + '</div>' : '') +
+        (cat.dims && !hasPhotos ? '<div class="report-detail report-na">' + this._txt('照片：', 'Photos: ') + NA + '</div>' : '') +
         '</div>';
     };
 
@@ -213,17 +229,14 @@ const Report = {
       MEASURE_CATEGORIES.forEach(cat => { inner += sectionHtml(cat, (boxes[b] || {})[cat.key]); });
       // Reports saved before these became independent sections kept them per box
       GLOBAL_CATEGORIES.forEach(cat => {
-        if (!assembly[cat.key]) inner += sectionHtml(cat, (boxes[b] || {})[cat.key]);
+        const old = (boxes[b] || {})[cat.key];
+        if (!assembly[cat.key] && hasContent(cat, old)) inner += sectionHtml(cat, old);
       });
-      if (inner) {
-        measureHtml += '<h3 class="report-box-title">' + this._txt('第 ' + b + ' 箱', 'Box ' + b) + '</h3>' + inner;
-      }
+      measureHtml += '<h3 class="report-box-title">' + this._txt('第 ' + b + ' 箱', 'Box ' + b) + '</h3>' + inner;
     });
     let globalInner = '';
     GLOBAL_CATEGORIES.forEach(cat => { globalInner += sectionHtml(cat, assembly[cat.key]); });
-    if (globalInner) {
-      measureHtml += '<h3 class="report-box-title">' + this._txt('装配', 'Assembly') + '</h3>' + globalInner;
-    }
+    measureHtml += '<h3 class="report-box-title">' + this._txt('装配', 'Assembly') + '</h3>' + globalInner;
 
     // Photos not attached to any measurement category
     const used = new Set();
@@ -249,10 +262,11 @@ const Report = {
           resultLabel.toUpperCase() + '</div>' : '') + '</div>' +
       '</div>' +
       '<table class="info-table">' + info + '</table>' +
-      (measureHtml ? '<div class="report-section"><div class="section-title">' + this._txt('尺寸测量', 'Measurements') + '</div></div>' + measureHtml : '') +
+      '<div class="report-section"><div class="section-title">' + this._txt('尺寸测量', 'Measurements') + '</div></div>' + measureHtml +
       looseHtml +
       '<div class="report-footer"><span>' + this._txt('由检验门户生成', 'Generated by Inspection Portal') + '</span>' +
-      '<span>' + e(new Date().toLocaleDateString(lang === 'zh' ? 'zh-CN' : 'en-US')) + '</span></div>';
+      '<span>N/A = ' + this._txt('不适用 (Not Applicable)', 'Not Applicable') + ' &nbsp;·&nbsp; ' +
+      e(new Date().toLocaleDateString(lang === 'zh' ? 'zh-CN' : 'en-US')) + '</span></div>';
     this._updatePdfState();
   },
 
