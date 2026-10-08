@@ -547,7 +547,7 @@ const BTeam = {
           <div class="aql-row"><span class="aql-label" data-i18n="form.sample_size">抽样数量</span><span class="aql-value" id="sum-samplesize">-</span></div>
           <div class="aql-row"><span class="aql-label" data-i18n="form.supplier">供应商</span><span class="aql-value" id="sum-supplier">-</span></div>
         </div>
-        <button class="btn btn-success w-full" style="margin-top:20px;" onclick="BTeam.submitInspection()" data-i18n="common.submit">提交检验</button>
+        <button class="btn btn-success w-full" style="margin-top:20px;" onclick="BTeam.askSubmit()" data-i18n="common.submit">提交检验</button>
       `;
       if (this.sessionData) {
         document.getElementById('sum-timestamp').textContent = this.sessionData.timestamp || '-';
@@ -996,23 +996,87 @@ const BTeam = {
     if (el) el.remove();
   },
 
-  submitInspection() {
-    if (!this.sessionId) { alert('No session!'); return; }
-    this.sessionData.status = 'submitted';
-    this.sessionData.submittedAt = Date.now();
-    if (typeof StorageAdapter !== 'undefined') {
-      StorageAdapter.saveSession(this.sessionId, this.sessionData).then(() => {
-        // Release B Team's hold on this draft now that it's been submitted —
-        // without this, fatt_current_session would keep pointing at a session
-        // that's now locked out of resume (status==='submitted'), and it would
-        // also keep this inspection out of the step-0 drafts list incorrectly
-        // (it's correctly excluded there anyway, but clearing the pointer is
-        // the clean way to signal "no draft in progress" going forward).
-        localStorage.removeItem('fatt_current_session');
-        alert(window.t ? window.t('msg.session_created') : 'Submitted!');
-        window.location.href = '../index.html';
-      });
+  // Submit button -> "Are you sure?" dialog. Nothing is submitted unless Yes is chosen.
+  askSubmit() {
+    if (this._submitting) return;
+    if (!this.sessionId || !this.sessionData) { alert('No session!'); return; }
+    if (this.sessionData.status === 'submitted') return;
+    this.closeSubmitDialog();
+    const d = this.sessionData;
+    const T = (k, fb) => (window.t ? window.t(k) : fb);
+    const typeText = d.type ? T('form.type.' + d.type, d.type) : '-';
+    const rows = [
+      [T('form.customer', 'Customer Code'), d.customer || '-'],
+      [T('form.type', 'Inspection Type'), typeText],
+      [T('form.pi', 'PI'), d.pi || '-'],
+      [T('form.inspection_date', 'Date'), d.inspectionDate || '-'],
+      [T('form.box_count', 'Box Count'), d.boxCount || '-'],
+      [T('submit.photos', 'Photos'), String((d.photos || []).length)]
+    ].map(r => `<div class="aql-row"><span class="aql-label">${this._esc(r[0])}</span><span class="aql-value">${this._esc(r[1])}</span></div>`).join('');
+    const overlay = document.createElement('div');
+    overlay.id = 'submitDialog';
+    overlay.className = 'modal-overlay';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.innerHTML = `
+      <div class="modal">
+        <div class="modal-title" data-i18n="submit.confirm_title">${this._esc(T('submit.confirm_title', 'Are you sure you want to submit?'))}</div>
+        <div class="aql-panel" style="margin-bottom:12px;">${rows}</div>
+        <div style="font-size:12px;color:#aaa;" data-i18n="submit.confirm_note">${this._esc(T('submit.confirm_note', 'Once submitted, this file can no longer be edited.'))}</div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost" id="submitNoBtn" data-i18n="submit.no">${this._esc(T('submit.no', 'No, go back'))}</button>
+          <button class="btn btn-success" id="submitYesBtn" data-i18n="submit.yes">${this._esc(T('submit.yes', 'Yes, submit'))}</button>
+        </div>
+      </div>`;
+    overlay.addEventListener('click', (ev) => { if (ev.target === overlay && !this._submitting) this.closeSubmitDialog(); });
+    document.body.appendChild(overlay);
+    document.getElementById('submitNoBtn').onclick = () => this.closeSubmitDialog();
+    document.getElementById('submitYesBtn').onclick = () => this.submitInspection();
+    this._submitKeyHandler = (ev) => { if (ev.key === 'Escape' && !this._submitting) this.closeSubmitDialog(); };
+    document.addEventListener('keydown', this._submitKeyHandler);
+    document.getElementById('submitNoBtn').focus();   // default focus is the safe choice
+  },
+
+  closeSubmitDialog() {
+    const el = document.getElementById('submitDialog');
+    if (el) el.remove();
+    if (this._submitKeyHandler) { document.removeEventListener('keydown', this._submitKeyHandler); this._submitKeyHandler = null; }
+  },
+
+  // Only reached from the "Yes" button. The file counts as submitted only once
+  // the saved copy has been read back with status "submitted".
+  async submitInspection() {
+    if (this._submitting) return;
+    if (!this.sessionId || !this.sessionData) { alert('No session!'); return; }
+    this._submitting = true;
+    const yes = document.getElementById('submitYesBtn'), no = document.getElementById('submitNoBtn');
+    if (yes) yes.disabled = true;
+    if (no) no.disabled = true;
+    const T = (k, fb) => (window.t ? window.t(k) : fb);
+    const previous = { status: this.sessionData.status, submittedAt: this.sessionData.submittedAt };
+    try {
+      this.sessionData.status = 'submitted';
+      this.sessionData.submittedAt = Date.now();
+      if (typeof StorageAdapter === 'undefined') throw new Error('no storage');
+      await StorageAdapter.saveSession(this.sessionId, this.sessionData);
+      const saved = await StorageAdapter.loadSession(this.sessionId);
+      if (!saved || saved.status !== 'submitted') throw new Error('not saved');
+    } catch (err) {
+      console.error('[BTeam] submit failed:', err);
+      // Put the file back exactly as it was: still an unfinished draft
+      this.sessionData.status = previous.status || 'in_progress';
+      if (previous.submittedAt) this.sessionData.submittedAt = previous.submittedAt; else delete this.sessionData.submittedAt;
+      try { if (typeof StorageAdapter !== 'undefined') await StorageAdapter.saveSession(this.sessionId, this.sessionData); } catch (e) { /* ignore */ }
+      this._submitting = false;
+      this.closeSubmitDialog();
+      alert(T('submit.failed', 'Submit failed. Nothing was submitted - please try again.'));
+      return;
     }
+    // Release the draft pointer: this file is finished and no longer resumable
+    localStorage.removeItem('fatt_current_session');
+    this.closeSubmitDialog();
+    alert(T('submit.done', 'Submitted successfully.'));
+    window.location.href = '../index.html';
   }
 };
 
