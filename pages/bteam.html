@@ -144,15 +144,24 @@ function stepLabel(i) {
   return (window.t && s.i18n) ? window.t(s.i18n) : s.label;
 }
 
+// Categories repeated inside every box. `dims` = Length/Height/Width/Weight
+// inputs shown above the photo drop zone (replaces the free-text notes box).
 const MEASURE_CATEGORIES = [
-  { key: 'carton_dimension_weight', zh: '箱体尺寸与重量', en: 'Dimension Carton & Weight' },
-  { key: 'every_panel', zh: '每个面板', en: 'Every Panel' },
+  { key: 'carton_dimension_weight', zh: '箱体尺寸与重量', en: 'Dimension Carton & Weight', dims: true },
+  { key: 'every_panel', zh: '内部包装 (Internal Packaging)', en: 'Internal Packaging' },
   { key: 'assembly_instruction', zh: '装配说明', en: 'Assembly Instruction' },
   { key: 'accessories', zh: '配件', en: 'Accessories' },
-  { key: 'fully_assembly', zh: '完整装配', en: 'Fully Assembly' },
-  { key: 'dimension_assembly', zh: '装配尺寸', en: 'Dimension Assembly' },
-  { key: 'warning_label', zh: '警告标签', en: 'Warning Label' }
+  { key: 'warning_label', zh: '警告标签/产品标签 (Warning Label/Product label)', en: 'Warning Label/Product label' }
 ];
+
+// Independent sections shown once after the boxes (not repeated per box).
+// They live in measurements.assembly[key] and use the pseudo-box id "global".
+const GLOBAL_CATEGORIES = [
+  { key: 'fully_assembly', zh: '完整装配', en: 'Fully Assembly', notes: false },
+  { key: 'dimension_assembly', zh: '装配尺寸', en: 'Dimension Assembly', dims: true, notes: false }
+];
+const GLOBAL_BOX = 'global';
+const DIM_FIELDS = ['length', 'height', 'width', 'weight'];
 
 const BTeam = {
   currentStep: 0,
@@ -165,7 +174,12 @@ const BTeam = {
     // I18n only re-labels [data-i18n] nodes; the "Step n of N" text is built
     // from a template, so refresh it when the language is switched.
     document.querySelectorAll('.lang-btn').forEach(btn => {
-      btn.addEventListener('click', () => setTimeout(() => this._updateNavInfo(), 0));
+      btn.addEventListener('click', () => setTimeout(() => {
+        this._updateNavInfo();
+        // Category names on the measurements step are built per language at
+        // render time, so rebuild that step (its inputs save on every keystroke).
+        if (this.currentStep === 2) this._renderStepContent(2);
+      }, 0));
     });
     // Set default date
     const dateInput = document.getElementById('inspectionDate');
@@ -490,28 +504,68 @@ const BTeam = {
     if (window.I18n) I18n.apply();
   },
 
+  _emptyEntry(withDims) {
+    const e = { photoIds: [], detail: '' };
+    if (withDims) e.dims = { length: '', height: '', width: '', weight: '' };
+    return e;
+  },
+
   _ensureMeasurements() {
     if (!this.sessionData) this.sessionData = {};
     if (!this.sessionData.measurements) this.sessionData.measurements = { boxes: {} };
+    const m = this.sessionData.measurements;
+    if (!m.boxes) m.boxes = {};
+    if (!m.assembly) m.assembly = {};
+
+    GLOBAL_CATEGORIES.forEach(cat => {
+      if (!m.assembly[cat.key]) m.assembly[cat.key] = this._emptyEntry(cat.dims);
+      if (cat.dims && !m.assembly[cat.key].dims) m.assembly[cat.key].dims = this._emptyEntry(true).dims;
+    });
+
     const boxCount = Math.max(1, parseInt(this.sessionData.boxCount, 10) || 1);
     for (let b = 1; b <= boxCount; b++) {
-      if (!this.sessionData.measurements.boxes[b]) this.sessionData.measurements.boxes[b] = {};
+      if (!m.boxes[b]) m.boxes[b] = {};
       MEASURE_CATEGORIES.forEach(cat => {
-        if (!this.sessionData.measurements.boxes[b][cat.key]) {
-          this.sessionData.measurements.boxes[b][cat.key] = { photoIds: [], detail: '' };
-        }
+        if (!m.boxes[b][cat.key]) m.boxes[b][cat.key] = this._emptyEntry(cat.dims);
+        if (cat.dims && !m.boxes[b][cat.key].dims) m.boxes[b][cat.key].dims = this._emptyEntry(true).dims;
       });
     }
+
+    // Drafts saved before Fully/Dimension Assembly became independent sections
+    // kept them inside every box: fold those photos/notes into the new
+    // sections so nothing disappears.
+    Object.keys(m.boxes).forEach(b => {
+      GLOBAL_CATEGORIES.forEach(cat => {
+        const old = m.boxes[b] && m.boxes[b][cat.key];
+        if (!old) return;
+        const dest = m.assembly[cat.key];
+        (old.photoIds || []).forEach(id => { if (!dest.photoIds.includes(id)) dest.photoIds.push(id); });
+        if ((old.detail || '').trim()) dest.detail = (dest.detail ? dest.detail + '\n' : '') + old.detail.trim();
+        delete m.boxes[b][cat.key];
+      });
+    });
     return boxCount;
+  },
+
+  // Entry for a drop zone: a real box number, or the independent "global" sections.
+  _getEntry(box, cat) {
+    const m = this.sessionData && this.sessionData.measurements;
+    if (!m) return null;
+    if (String(box) === GLOBAL_BOX) return (m.assembly && m.assembly[cat]) || null;
+    return (m.boxes && m.boxes[box] && m.boxes[box][cat]) || null;
   },
 
   _getAssignedPhotoIds() {
     const assigned = new Set();
-    const boxes = (this.sessionData.measurements && this.sessionData.measurements.boxes) || {};
+    const m = this.sessionData.measurements || {};
+    const boxes = m.boxes || {};
     Object.keys(boxes).forEach(b => {
       Object.keys(boxes[b]).forEach(cat => {
         (boxes[b][cat].photoIds || []).forEach(id => assigned.add(id));
       });
+    });
+    Object.keys(m.assembly || {}).forEach(cat => {
+      ((m.assembly[cat] || {}).photoIds || []).forEach(id => assigned.add(id));
     });
     return assigned;
   },
@@ -558,42 +612,71 @@ const BTeam = {
     }
     html += `</div></div><div id="boxesContainer">`;
 
-    for (let b = 1; b <= boxCount; b++) {
-      const isOpen = this._expandedBoxes.has(b);
-      html += `
-        <div class="box-section">
-          <div class="box-header" onclick="BTeam.toggleBox(${b})">
-            <span class="box-toggle-icon" id="boxIcon${b}">${isOpen ? '▼' : '▶'}</span>
-            <span data-i18n="measure.box">箱</span> ${b}
-          </div>
-          <div class="box-body" id="boxBody${b}" style="display:${isOpen ? 'flex' : 'none'};">
-      `;
-      MEASURE_CATEGORIES.forEach(cat => {
-        const catData = this.sessionData.measurements.boxes[b][cat.key];
-        const label = lang === 'en' ? cat.en : cat.zh;
-        html += `
+    const block = (box, cat, entry, withNotes) => {
+      const label = lang === 'en' ? cat.en : cat.zh;
+      let h = `
           <div class="category-block">
-            <div class="category-label">${this._esc(label)}</div>
-            <div class="dropzone" data-role="dropzone" data-box="${b}" data-cat="${cat.key}">
-        `;
-        if (!catData.photoIds || catData.photoIds.length === 0) {
-          html += `<div class="dropzone-empty-hint">${this._esc(noPhotosText)}</div>`;
-        } else {
-          catData.photoIds.forEach(id => { html += this._photoThumbHtml(id, imgMap[id]); });
-        }
-        html += `
-            </div>
-            <textarea class="form-control category-detail" placeholder="${this._esc(detailPlaceholder)}" oninput="BTeam.updateMeasureDetail(${b}, '${cat.key}', this.value)">${this._esc(catData.detail || '')}</textarea>
+            <div class="category-label">${this._esc(label)}</div>`;
+      if (cat.dims) {
+        h += `<div class="dims-grid">`;
+        DIM_FIELDS.forEach(f => {
+          const v = (entry.dims && entry.dims[f]) || '';
+          h += `
+              <label class="dim-field">
+                <span class="dim-label" data-i18n="measure.dim.${f}">${f}</span>
+                <input class="form-control" type="text" inputmode="decimal" value="${this._esc(v)}" oninput="BTeam.updateMeasureDim('${box}', '${cat.key}', '${f}', this.value)" />
+              </label>`;
+        });
+        h += `</div>`;
+      }
+      h += `
+            <div class="dropzone" data-role="dropzone" data-box="${box}" data-cat="${cat.key}">`;
+      if (!entry.photoIds || entry.photoIds.length === 0) {
+        h += `<div class="dropzone-empty-hint">${this._esc(noPhotosText)}</div>`;
+      } else {
+        entry.photoIds.forEach(id => { h += this._photoThumbHtml(id, imgMap[id]); });
+      }
+      h += `</div>`;
+      if (withNotes) {
+        h += `
+            <textarea class="form-control category-detail" placeholder="${this._esc(detailPlaceholder)}" oninput="BTeam.updateMeasureDetail('${box}', '${cat.key}', this.value)">${this._esc(entry.detail || '')}</textarea>`;
+      }
+      return h + `
+          </div>`;
+    };
+
+    const section = (id, titleHtml, inner) => {
+      const isOpen = this._expandedBoxes.has(id);
+      return `
+        <div class="box-section">
+          <div class="box-header" onclick="BTeam.toggleBox('${id}')">
+            <span class="box-toggle-icon" id="boxIcon${id}">${isOpen ? '▼' : '▶'}</span>
+            ${titleHtml}
           </div>
-        `;
-      });
-      html += `</div></div>`;
+          <div class="box-body" id="boxBody${id}" style="display:${isOpen ? 'flex' : 'none'};">${inner}</div>
+        </div>`;
+    };
+
+    for (let b = 1; b <= boxCount; b++) {
+      const inner = MEASURE_CATEGORIES.map(cat =>
+        block(b, cat, this.sessionData.measurements.boxes[b][cat.key], !cat.dims)
+      ).join('');
+      html += section(b, `<span data-i18n="measure.box">箱</span> ${b}`, inner);
     }
+    // Independent sections, shown once after the boxes
+    GLOBAL_CATEGORIES.forEach(cat => {
+      const entry = this.sessionData.measurements.assembly[cat.key];
+      const title = this._esc(lang === 'en' ? cat.en : cat.zh);
+      html += section(cat.key, `<span>${title}</span>`, block(GLOBAL_BOX, { ...cat, zh: '', en: '' }, entry, cat.notes !== false));
+    });
     html += `</div>`;
     return html;
   },
 
   toggleBox(b) {
+    // Box numbers arrive as strings from inline handlers; keep them numeric so
+    // they match the numbers used when rendering, but leave section ids alone.
+    if (typeof b === 'string' && /^\d+$/.test(b)) b = Number(b);
     if (this._expandedBoxes.has(b)) this._expandedBoxes.delete(b); else this._expandedBoxes.add(b);
     const body = document.getElementById('boxBody' + b);
     const icon = document.getElementById('boxIcon' + b);
@@ -603,10 +686,19 @@ const BTeam = {
   },
 
   updateMeasureDetail(box, cat, value) {
-    if (!this.sessionData.measurements || !this.sessionData.measurements.boxes[box]) return;
-    const entry = this.sessionData.measurements.boxes[box][cat];
+    const entry = this._getEntry(box, cat);
     if (!entry) return;
     entry.detail = value;
+    if (typeof StorageAdapter !== 'undefined' && this.sessionId) {
+      StorageAdapter.saveSession(this.sessionId, this.sessionData);
+    }
+  },
+
+  updateMeasureDim(box, cat, field, value) {
+    const entry = this._getEntry(box, cat);
+    if (!entry || !DIM_FIELDS.includes(field)) return;
+    if (!entry.dims) entry.dims = this._emptyEntry(true).dims;
+    entry.dims[field] = value.trim();
     if (typeof StorageAdapter !== 'undefined' && this.sessionId) {
       StorageAdapter.saveSession(this.sessionId, this.sessionData);
     }
@@ -746,16 +838,14 @@ const BTeam = {
 
   async _movePhoto(photoId, fromBox, fromCat, toBox, toCat) {
     if (fromBox === toBox && fromCat === toCat) return;
-    if (fromBox && fromCat && this.sessionData.measurements && this.sessionData.measurements.boxes[fromBox] && this.sessionData.measurements.boxes[fromBox][fromCat]) {
-      const src = this.sessionData.measurements.boxes[fromBox][fromCat];
-      src.photoIds = (src.photoIds || []).filter(id => id !== photoId);
+    if (fromBox && fromCat) {
+      const src = this._getEntry(fromBox, fromCat);
+      if (src) src.photoIds = (src.photoIds || []).filter(id => id !== photoId);
     }
     if (toBox && toCat) {
-      if (!this.sessionData.measurements) this.sessionData.measurements = { boxes: {} };
-      if (!this.sessionData.measurements.boxes[toBox]) this.sessionData.measurements.boxes[toBox] = {};
-      if (!this.sessionData.measurements.boxes[toBox][toCat]) this.sessionData.measurements.boxes[toBox][toCat] = { photoIds: [], detail: '' };
-      const dest = this.sessionData.measurements.boxes[toBox][toCat];
-      if (!dest.photoIds.includes(photoId)) dest.photoIds.push(photoId);
+      this._ensureMeasurements();
+      const dest = this._getEntry(toBox, toCat);
+      if (dest && !dest.photoIds.includes(photoId)) dest.photoIds.push(photoId);
     }
     if (typeof StorageAdapter !== 'undefined' && this.sessionId) {
       await StorageAdapter.saveSession(this.sessionId, this.sessionData);
@@ -813,13 +903,20 @@ const BTeam = {
       this.sessionData.photos = this.sessionData.photos.filter(id => id !== photoId);
       // Also drop it from any measurement category it was dragged into, so
       // step 3 never keeps a dangling reference to a deleted photo.
-      const boxes = this.sessionData.measurements && this.sessionData.measurements.boxes;
+      const m = this.sessionData.measurements;
+      const boxes = m && m.boxes;
       if (boxes) {
         Object.keys(boxes).forEach(b => {
           Object.keys(boxes[b]).forEach(cat => {
             const entry = boxes[b][cat];
             if (entry && entry.photoIds) entry.photoIds = entry.photoIds.filter(id => id !== photoId);
           });
+        });
+      }
+      if (m && m.assembly) {
+        Object.keys(m.assembly).forEach(cat => {
+          const entry = m.assembly[cat];
+          if (entry && entry.photoIds) entry.photoIds = entry.photoIds.filter(id => id !== photoId);
         });
       }
       if (typeof StorageAdapter !== 'undefined' && this.sessionId) {
