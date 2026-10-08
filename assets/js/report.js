@@ -5,14 +5,24 @@
    (html2pdf.js). No network requests are made for the data itself.
    ============================================ */
 
+// Per-box categories
 const MEASURE_CATEGORIES = [
-  { key: 'carton_dimension_weight', zh: '箱体尺寸与重量', en: 'Dimension Carton & Weight' },
-  { key: 'every_panel', zh: '每个面板', en: 'Every Panel' },
+  { key: 'carton_dimension_weight', zh: '箱体尺寸与重量', en: 'Dimension Carton & Weight', dims: true },
+  { key: 'every_panel', zh: '内部包装', en: 'Internal Packaging' },
   { key: 'assembly_instruction', zh: '装配说明', en: 'Assembly Instruction' },
   { key: 'accessories', zh: '配件', en: 'Accessories' },
+  { key: 'warning_label', zh: '警告标签/产品标签', en: 'Warning Label/Product label' }
+];
+// Independent sections (not repeated per box), stored in measurements.assembly
+const GLOBAL_CATEGORIES = [
   { key: 'fully_assembly', zh: '完整装配', en: 'Fully Assembly' },
-  { key: 'dimension_assembly', zh: '装配尺寸', en: 'Dimension Assembly' },
-  { key: 'warning_label', zh: '警告标签', en: 'Warning Label' }
+  { key: 'dimension_assembly', zh: '装配尺寸', en: 'Dimension Assembly', dims: true }
+];
+const DIM_FIELDS = [
+  { key: 'length', zh: '长', en: 'Length' },
+  { key: 'height', zh: '高', en: 'Height' },
+  { key: 'width', zh: '宽', en: 'Width' },
+  { key: 'weight', zh: '重量', en: 'Weight' }
 ];
 
 // Supplier is fixed for this deployment; older records saved before the field existed show it too.
@@ -85,6 +95,8 @@ const Report = {
         ((boxes[b][c] || {}).photoIds || []).forEach(id => set.add(id));
       });
     });
+    const asm = (data.measurements && data.measurements.assembly) || {};
+    Object.keys(asm).forEach(c => ((asm[c] || {}).photoIds || []).forEach(id => set.add(id)));
     return Array.from(set);
   },
 
@@ -132,34 +144,55 @@ const Report = {
     ].map(r => '<tr><td>' + r[0] + '</td><td>' + r[1] + '</td><td>' + r[2] + '</td><td>' + r[3] + '</td></tr>').join('') +
       '<tr><td>' + this._txt('供应商', 'Supplier') + '</td><td colspan="3">' + e(d.supplier || SUPPLIER_NAME) + '</td></tr>';
 
-    // Measurements, grouped by box then category
+    // Measurements: per-box categories first, then the independent sections.
     const boxes = (d.measurements && d.measurements.boxes) || {};
+    const assembly = (d.measurements && d.measurements.assembly) || {};
     const boxNums = Object.keys(boxes).sort((a, b) => Number(a) - Number(b));
+
+    const dimsHtml = entry => {
+      const dims = entry.dims || {};
+      const cells = DIM_FIELDS.filter(f => String(dims[f.key] == null ? '' : dims[f.key]).trim() !== '')
+        .map(f => '<span class="report-dim"><b>' + e(f[lang] || f.en) + ':</b> ' + e(dims[f.key]) + '</span>');
+      return cells.length ? '<div class="report-detail report-dims">' + cells.join(' &nbsp; ') + '</div>' : '';
+    };
+    const sectionHtml = (cat, entry) => {
+      if (!entry) return '';
+      const hasPhotos = (entry.photoIds || []).some(id => this.imageMap[id]);
+      const dims = cat.dims ? dimsHtml(entry) : '';
+      const note = (entry.detail || '').trim();
+      if (!hasPhotos && !dims && !note) return '';
+      return '<div class="report-section">' +
+        '<div class="section-title">' + e(cat[lang] || cat.en) + '</div>' +
+        dims +
+        (note ? '<div class="report-detail">' + e(note).replace(/\n/g, '<br>') + '</div>' : '') +
+        this._photoGrid(entry.photoIds) +
+        '</div>';
+    };
+
     let measureHtml = '';
     boxNums.forEach(b => {
       let inner = '';
-      MEASURE_CATEGORIES.forEach(cat => {
-        const entry = (boxes[b] || {})[cat.key];
-        if (!entry) return;
-        const hasPhotos = (entry.photoIds || []).some(id => this.imageMap[id]);
-        if (!hasPhotos && !(entry.detail || '').trim()) return;
-        inner += '<div class="report-section">' +
-          '<div class="section-title">' + e(cat[lang] || cat.en) + '</div>' +
-          ((entry.detail || '').trim()
-            ? '<div class="report-detail">' + e(entry.detail).replace(/\n/g, '<br>') + '</div>' : '') +
-          this._photoGrid(entry.photoIds) +
-          '</div>';
+      MEASURE_CATEGORIES.forEach(cat => { inner += sectionHtml(cat, (boxes[b] || {})[cat.key]); });
+      // Reports saved before these became independent sections kept them per box
+      GLOBAL_CATEGORIES.forEach(cat => {
+        if (!assembly[cat.key]) inner += sectionHtml(cat, (boxes[b] || {})[cat.key]);
       });
       if (inner) {
         measureHtml += '<h3 class="report-box-title">' + this._txt('第 ' + b + ' 箱', 'Box ' + b) + '</h3>' + inner;
       }
     });
+    let globalInner = '';
+    GLOBAL_CATEGORIES.forEach(cat => { globalInner += sectionHtml(cat, assembly[cat.key]); });
+    if (globalInner) {
+      measureHtml += '<h3 class="report-box-title">' + this._txt('装配', 'Assembly') + '</h3>' + globalInner;
+    }
 
     // Photos not attached to any measurement category
     const used = new Set();
     boxNums.forEach(b => Object.keys(boxes[b] || {}).forEach(c => {
       ((boxes[b][c] || {}).photoIds || []).forEach(id => used.add(id));
     }));
+    Object.keys(assembly).forEach(c => ((assembly[c] || {}).photoIds || []).forEach(id => used.add(id)));
     const loose = (d.photos || []).filter(id => !used.has(id));
     const looseHtml = this._photoGrid(loose)
       ? '<div class="report-section"><div class="section-title">' + this._txt('现场照片', 'Site Photos') + '</div>' +
