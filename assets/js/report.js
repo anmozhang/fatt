@@ -19,6 +19,18 @@ const GLOBAL_CATEGORIES = [
   { key: 'fully_assembly', zh: '完整装配', en: 'Fully Assembly' },
   { key: 'dimension_assembly', zh: '装配尺寸', en: 'Dimension Assembly', dims: true }
 ];
+// Weight / test sections (independent, stored in measurements.assembly)
+const TEST_SECTIONS = [
+  { key: 'weight_of_product', zh: '产品重量', en: 'Weight of Product', netWeight: true },
+  { key: 'drop_test', zh: '跌落测试', en: 'Drop Test' },
+  { key: 'drop_test_result', zh: '跌落测试检验结果', en: 'Drop Test Inspection Result', result: true }
+];
+const CONSTRUCTION_TITLE = { zh: '结构测试', en: 'Construction Test' };
+const CONSTRUCTION_ITEMS = [
+  { key: 'strength_test', zh: '强度测试', en: 'Strength Test' },
+  { key: 'static_test', zh: '静态测试', en: 'Static Test' },
+  { key: 'moisture_test', zh: '湿度测试', en: 'Moisture Test' }
+];
 const DIM_FIELDS = [
   { key: 'length', zh: '长', en: 'Length' },
   { key: 'height', zh: '高', en: 'Height' },
@@ -209,6 +221,8 @@ const Report = {
       if (!entry) return false;
       if (this._entryPhotoIds(entry).some(id => this.imageMap[id])) return true;
       if ((entry.detail || '').trim()) return true;
+      if (cat.netWeight && String(entry.netWeight || '').trim()) return true;
+      if (cat.result && entry.result) return true;
       const dims = entry.dims || {};
       return !!cat.dims && DIM_FIELDS.some(f => String(dims[f.key] == null ? '' : dims[f.key]).trim() !== '');
     };
@@ -232,12 +246,24 @@ const Report = {
       }).join('');
     };
     // A section with no photos / measurements / notes prints Not Applicable instead of vanishing.
-    const sectionHtml = (cat, entry) => {
+    const sectionHtml = (cat, entry, sub) => {
       entry = entry || {};
       const note = (entry.detail || '').trim();
       const empty = !hasContent(cat, entry);
+      // Net weight / pass-fail result print right under the title
+      let extra = '';
+      if (cat.netWeight) {
+        const nw = String(entry.netWeight || '').trim();
+        extra = '<div class="report-detail report-dims"><b>' + this._txt('净重', 'Net Weight') + ':</b> ' + (nw ? e(nw) : NA) + '</div>';
+      }
+      if (cat.result) {
+        const r = entry.result === 'pass' ? ['#14b8a6', this._txt('合格 (Pass)', 'Pass')] : entry.result === 'fail' ? ['#e53935', this._txt('不合格 (Fail)', 'Fail')] : null;
+        extra = '<div class="report-detail report-dims"><b>' + this._txt('结果', 'Result') + ':</b> ' +
+          (r ? '<span style="display:inline-block;padding:2px 12px;border-radius:4px;background:' + r[0] + ';color:#ffffff;font-weight:700;">' + r[1] + '</span>' : NA) + '</div>';
+      }
+      const titleStyle = sub ? ' style="font-size:13px;text-transform:none;letter-spacing:0;font-weight:600;border-bottom-width:1px;border-bottom-color:#bbbbbb;margin-left:12px;"' : '';
       return '<div class="report-section">' +
-        '<div class="section-title">' + e(cat[lang] || cat.en) + '</div>' +
+        '<div class="section-title"' + titleStyle + '>' + e(cat[lang] || cat.en) + '</div>' + extra +
         (note ? '<div class="report-detail">' + e(note).replace(/\n/g, '<br>') + '</div>' : '') +
         (cat.dims ? dimsHtml(entry) : this._photoGrid(entry.photoIds)) +
         (!cat.dims && empty ? '<div class="report-detail report-na">' + NA + '</div>' : '') +
@@ -258,6 +284,24 @@ const Report = {
     let globalInner = '';
     GLOBAL_CATEGORIES.forEach(cat => { globalInner += sectionHtml(cat, assembly[cat.key]); });
     measureHtml += '<h3 class="report-box-title">' + this._txt('装配', 'Assembly') + '</h3>' + globalInner;
+
+    // Weight & tests (only for inspections that have these sections)
+    const customKeys = Array.isArray(d.measurements && d.measurements.constructionCustom)
+      ? d.measurements.constructionCustom
+      : Object.keys(assembly).filter(k => assembly[k] && assembly[k].custom);
+    const hasTests = TEST_SECTIONS.concat(CONSTRUCTION_ITEMS).some(c => assembly[c.key]) || customKeys.length > 0;
+    if (hasTests) {
+      let testInner = '';
+      TEST_SECTIONS.forEach(cat => { testInner += sectionHtml(cat, assembly[cat.key]); });
+      testInner += '<div class="report-section"><div class="section-title">' + e(CONSTRUCTION_TITLE[lang] || CONSTRUCTION_TITLE.en) + '</div></div>';
+      CONSTRUCTION_ITEMS.forEach(it => { testInner += sectionHtml(it, assembly[it.key], true); });
+      customKeys.forEach(k => {
+        const en = assembly[k] || {};
+        const title = String(en.title || '').trim() || this._txt('未命名项目', 'Untitled');
+        testInner += sectionHtml({ key: k, zh: title, en: title }, en, true);
+      });
+      measureHtml += '<h3 class="report-box-title">' + this._txt('重量与测试', 'Weight & Tests') + '</h3>' + testInner;
+    }
 
     // Photos not attached to any measurement category
     const used = new Set();
