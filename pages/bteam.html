@@ -202,7 +202,7 @@ const BTeam = {
     if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
     // Auto-fill submission timestamp (read-only, informational)
     const tsDisplay = document.getElementById('timestampDisplay');
-    if (tsDisplay) tsDisplay.textContent = this._formatTimestamp(new Date());
+    if (tsDisplay) tsDisplay.textContent = this._fmtDMY(this._formatTimestamp(new Date()));
     // Entry points:
     //  - ?resume=<sessionId>  Customer List -> Pending: open that draft
     //  - ?list=1              home screen "Get Start": show the unfinished drafts
@@ -281,6 +281,12 @@ const BTeam = {
     this.currentStep = 0;
     document.querySelectorAll('.step-item').forEach((el, i) => { el.classList.toggle('active', i === 0); el.classList.remove('done'); });
     await this.goToStep(0);
+  },
+
+  // Display dates as Day/Month/Year (stored values stay YYYY-MM-DD)
+  _fmtDMY(v) {
+    const m = String(v == null ? '' : v).match(/^(\d{4})-(\d{2})-(\d{2})(.*)$/);
+    return m ? m[3] + '/' + m[2] + '/' + m[1] + m[4] : String(v == null ? '' : v);
   },
 
   _formatTimestamp(d) {
@@ -433,7 +439,7 @@ const BTeam = {
       const name = (code || untitled) + ' - ' + (sd.type === 'sample' ? 'Sample' : 'PSI');
       const stepIdx = (typeof sd.lastStep === 'number' && sd.lastStep >= 0 && sd.lastStep < STEPS.length) ? sd.lastStep : 0;
       const stepSpan = `<span data-i18n="${STEPS[stepIdx].i18n}">${this._esc(stepLabel(stepIdx))}</span>`;
-      const metaHtml = [sd.inspectionDate ? this._esc(sd.inspectionDate) : '', stepSpan].filter(Boolean).join(' · ');
+      const metaHtml = [sd.inspectionDate ? this._esc(this._fmtDMY(sd.inspectionDate)) : '', stepSpan].filter(Boolean).join(' · ');
       return `
         <div class="draft-item" onclick="BTeam.resumeDraft('${sid}')">
           <div>
@@ -459,7 +465,7 @@ const BTeam = {
         <div class="data-form" style="margin-top:16px;">
           <div class="form-group">
             <label class="form-label" data-i18n="form.timestamp">提交时间</label>
-            <div class="form-control" id="timestampDisplay" style="display:flex;align-items:center;color:#888;background:rgba(255,255,255,0.03);">${this._esc(ts)}</div>
+            <div class="form-control" id="timestampDisplay" style="display:flex;align-items:center;color:#888;background:rgba(255,255,255,0.03);">${this._esc(this._fmtDMY(ts))}</div>
           </div>
           <div class="form-group">
             <label class="form-label" data-i18n="form.customer">客户代码 (Customer Code)</label>
@@ -566,7 +572,7 @@ const BTeam = {
       if (this.sessionData) {
         document.getElementById('sum-timestamp').textContent = this.sessionData.timestamp || '-';
         document.getElementById('sum-customer').textContent = this.sessionData.customer || '-';
-        document.getElementById('sum-date').textContent = this.sessionData.inspectionDate || '-';
+        document.getElementById('sum-date').textContent = this.sessionData.inspectionDate ? this._fmtDMY(this.sessionData.inspectionDate) : '-';
         document.getElementById('sum-pi').textContent = this.sessionData.pi || '-';
         document.getElementById('sum-batch').textContent = this.sessionData.batch || '-';
         document.getElementById('sum-model').textContent = this.sessionData.model || '-';
@@ -1170,7 +1176,7 @@ const BTeam = {
       [T('form.customer', 'Customer Code'), d.customer || '-'],
       [T('form.type', 'Inspection Type'), typeText],
       [T('form.pi', 'PI'), d.pi || '-'],
-      [T('form.inspection_date', 'Date'), d.inspectionDate || '-'],
+      [T('form.inspection_date', 'Date'), d.inspectionDate ? this._fmtDMY(d.inspectionDate) : '-'],
       [T('form.box_count', 'Box Count'), d.boxCount || '-'],
       [T('submit.photos', 'Photos'), String((d.photos || []).length)]
     ].map(r => `<div class="aql-row"><span class="aql-label">${this._esc(r[0])}</span><span class="aql-value">${this._esc(r[1])}</span></div>`).join('');
