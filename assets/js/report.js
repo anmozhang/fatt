@@ -17,8 +17,11 @@ const MEASURE_CATEGORIES = [
 // Independent sections (not repeated per box), stored in measurements.assembly
 const GLOBAL_CATEGORIES = [
   { key: 'fully_assembly', zh: '完整装配', en: 'Fully Assembly' },
-  { key: 'dimension_assembly', zh: '装配尺寸', en: 'Dimension Assembly', dims: true }
+  { key: 'dimension_assembly', zh: '装配尺寸', en: 'Dimension Assembly', dims: true },
+  { key: 'assembly_weight', zh: '重量', en: 'Weight', grossWeight: true }
 ];
+// Each box has its own Weight section (Gross Weight + photos + note)
+const BOX_WEIGHT = { key: 'carton_weight', zh: '重量', en: 'Weight', grossWeight: true };
 // Weight / test sections (independent, stored in measurements.assembly)
 const TEST_SECTIONS = [
   { key: 'weight_of_product', zh: '产品重量', en: 'Weight of Product', netWeight: true },
@@ -31,11 +34,11 @@ const CONSTRUCTION_ITEMS = [
   { key: 'static_test', zh: '静态测试', en: 'Static Test' },
   { key: 'moisture_test', zh: '湿度测试', en: 'Moisture Test' }
 ];
+const DIM_FIELD_WEIGHT_LEGACY = { key: 'weight', zh: '重量', en: 'Weight' };
 const DIM_FIELDS = [
   { key: 'length', zh: '长', en: 'Length' },
-  { key: 'height', zh: '高', en: 'Height' },
   { key: 'width', zh: '宽', en: 'Width' },
-  { key: 'weight', zh: '重量', en: 'Weight' }
+  { key: 'height', zh: '高', en: 'Height' }
 ];
 
 // Supplier is fixed for this deployment; older records saved before the field existed show it too.
@@ -222,23 +225,29 @@ const Report = {
       if (this._entryPhotoIds(entry).some(id => this.imageMap[id])) return true;
       if ((entry.detail || '').trim()) return true;
       if (cat.netWeight && String(entry.netWeight || '').trim()) return true;
+      if (cat.grossWeight && String(entry.grossWeight || '').trim()) return true;
       if (cat.result && entry.result) return true;
       const dims = entry.dims || {};
-      return !!cat.dims && DIM_FIELDS.some(f => String(dims[f.key] == null ? '' : dims[f.key]).trim() !== '');
+      return !!cat.dims && DIM_FIELDS.concat([DIM_FIELD_WEIGHT_LEGACY]).some(f => String(dims[f.key] == null ? '' : dims[f.key]).trim() !== '');
     };
     // Dimension sections: every field prints its value with its own photos underneath.
     // Reports submitted before per-field photos existed keep the old inline layout.
     const dimsHtml = entry => {
       const dims = entry.dims || {};
+      // Reports saved when Weight was still a dimension field keep printing it
+      const legacyW = DIM_FIELD_WEIGHT_LEGACY;
+      const hasLegacyW = String(dims.weight == null ? '' : dims.weight).trim() !== '' ||
+        ((entry.dimPhotos && entry.dimPhotos.weight) || []).some(id => this.imageMap[id]);
+      const fields = hasLegacyW ? DIM_FIELDS.concat([legacyW]) : DIM_FIELDS;
       const val = f => { const v = String(dims[f.key] == null ? '' : dims[f.key]).trim(); return v ? e(v) : NA; };
       if (!entry.dimPhotos) {
-        const cells = DIM_FIELDS.map(f => '<span class="report-dim"><b>' + e(f[lang] || f.en) + ':</b> ' + val(f) + '</span>');
+        const cells = fields.map(f => '<span class="report-dim"><b>' + e(f[lang] || f.en) + ':</b> ' + val(f) + '</span>');
         const anyPhoto = (entry.photoIds || []).some(id => this.imageMap[id]);
         return '<div class="report-detail report-dims">' + cells.join(' &nbsp; ') + '</div>' +
           this._photoGrid(entry.photoIds) +
           (anyPhoto ? '' : '<div class="report-detail report-na">' + this._txt('照片：', 'Photos: ') + NA + '</div>');
       }
-      return DIM_FIELDS.map(f => {
+      return fields.map(f => {
         const ids = entry.dimPhotos[f.key] || [];
         const has = ids.some(id => this.imageMap[id]);
         return '<div class="report-detail report-dims"><b>' + e(f[lang] || f.en) + ':</b> ' + val(f) + '</div>' +
@@ -255,6 +264,10 @@ const Report = {
       if (cat.netWeight) {
         const nw = String(entry.netWeight || '').trim();
         extra = '<div class="report-detail report-dims"><b>' + this._txt('净重', 'Net Weight') + ':</b> ' + (nw ? e(nw) : NA) + '</div>';
+      }
+      if (cat.grossWeight) {
+        const gw = String(entry.grossWeight || '').trim();
+        extra = '<div class="report-detail report-dims"><b>' + this._txt('毛重', 'Gross Weight') + ':</b> ' + (gw ? e(gw) : NA) + '</div>';
       }
       if (cat.result) {
         const r = entry.result === 'pass' ? ['#14b8a6', this._txt('合格 (Pass)', 'Pass')] : entry.result === 'fail' ? ['#e53935', this._txt('不合格 (Fail)', 'Fail')] : null;
@@ -274,6 +287,7 @@ const Report = {
     boxNums.forEach(b => {
       let inner = '';
       MEASURE_CATEGORIES.forEach(cat => { inner += sectionHtml(cat, (boxes[b] || {})[cat.key]); });
+      if ((boxes[b] || {})[BOX_WEIGHT.key]) inner += sectionHtml(BOX_WEIGHT, boxes[b][BOX_WEIGHT.key]);
       // Reports saved before these became independent sections kept them per box
       GLOBAL_CATEGORIES.forEach(cat => {
         const old = (boxes[b] || {})[cat.key];
@@ -282,7 +296,10 @@ const Report = {
       measureHtml += '<h3 class="report-box-title">' + this._txt('第 ' + b + ' 箱', 'Box ' + b) + '</h3>' + inner;
     });
     let globalInner = '';
-    GLOBAL_CATEGORIES.forEach(cat => { globalInner += sectionHtml(cat, assembly[cat.key]); });
+    GLOBAL_CATEGORIES.forEach(cat => {
+      if (cat.grossWeight && !assembly[cat.key]) return;      // reports from before Weight became its own section
+      globalInner += sectionHtml(cat, assembly[cat.key]);
+    });
     measureHtml += '<h3 class="report-box-title">' + this._txt('装配', 'Assembly') + '</h3>' + globalInner;
 
     // Weight & tests (only for inspections that have these sections)
