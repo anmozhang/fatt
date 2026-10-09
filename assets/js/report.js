@@ -122,16 +122,23 @@ const Report = {
     void root;
   },
 
+  // Every photo id attached to a measurement entry (general list + per-dimension lists)
+  _entryPhotoIds(entry) {
+    const ids = [...((entry && entry.photoIds) || [])];
+    if (entry && entry.dimPhotos) Object.keys(entry.dimPhotos).forEach(f => ids.push(...(entry.dimPhotos[f] || [])));
+    return ids;
+  },
+
   _allPhotoIds(data) {
     const set = new Set(data.photos || []);
     const boxes = (data.measurements && data.measurements.boxes) || {};
     Object.keys(boxes).forEach(b => {
       Object.keys(boxes[b] || {}).forEach(c => {
-        ((boxes[b][c] || {}).photoIds || []).forEach(id => set.add(id));
+        this._entryPhotoIds(boxes[b][c]).forEach(id => set.add(id));
       });
     });
     const asm = (data.measurements && data.measurements.assembly) || {};
-    Object.keys(asm).forEach(c => ((asm[c] || {}).photoIds || []).forEach(id => set.add(id)));
+    Object.keys(asm).forEach(c => this._entryPhotoIds(asm[c]).forEach(id => set.add(id)));
     return Array.from(set);
   },
 
@@ -197,34 +204,42 @@ const Report = {
     for (let i = 1; i <= (parseInt(d.boxCount, 10) || 0); i++) boxSet.add(i);
     const boxNums = Array.from(boxSet).sort((x, y) => x - y);
 
-    const dimsHtml = entry => {
-      const dims = (entry && entry.dims) || {};
-      const cells = DIM_FIELDS.map(f => {
-        const v = String(dims[f.key] == null ? '' : dims[f.key]).trim();
-        return '<span class="report-dim"><b>' + e(f[lang] || f.en) + ':</b> ' + (v ? e(v) : NA) + '</span>';
-      });
-      return '<div class="report-detail report-dims">' + cells.join(' &nbsp; ') + '</div>';
-    };
     const hasContent = (cat, entry) => {
       if (!entry) return false;
-      if ((entry.photoIds || []).some(id => this.imageMap[id])) return true;
+      if (this._entryPhotoIds(entry).some(id => this.imageMap[id])) return true;
       if ((entry.detail || '').trim()) return true;
       const dims = entry.dims || {};
       return !!cat.dims && DIM_FIELDS.some(f => String(dims[f.key] == null ? '' : dims[f.key]).trim() !== '');
     };
+    // Dimension sections: every field prints its value with its own photos underneath.
+    // Reports submitted before per-field photos existed keep the old inline layout.
+    const dimsHtml = entry => {
+      const dims = entry.dims || {};
+      const val = f => { const v = String(dims[f.key] == null ? '' : dims[f.key]).trim(); return v ? e(v) : NA; };
+      if (!entry.dimPhotos) {
+        const cells = DIM_FIELDS.map(f => '<span class="report-dim"><b>' + e(f[lang] || f.en) + ':</b> ' + val(f) + '</span>');
+        const anyPhoto = (entry.photoIds || []).some(id => this.imageMap[id]);
+        return '<div class="report-detail report-dims">' + cells.join(' &nbsp; ') + '</div>' +
+          this._photoGrid(entry.photoIds) +
+          (anyPhoto ? '' : '<div class="report-detail report-na">' + this._txt('照片：', 'Photos: ') + NA + '</div>');
+      }
+      return DIM_FIELDS.map(f => {
+        const ids = entry.dimPhotos[f.key] || [];
+        const has = ids.some(id => this.imageMap[id]);
+        return '<div class="report-detail report-dims"><b>' + e(f[lang] || f.en) + ':</b> ' + val(f) + '</div>' +
+          (has ? this._photoGrid(ids) : '<div class="report-detail report-na">' + this._txt('照片：', 'Photos: ') + NA + '</div>');
+      }).join('');
+    };
     // A section with no photos / measurements / notes prints Not Applicable instead of vanishing.
     const sectionHtml = (cat, entry) => {
       entry = entry || {};
-      const hasPhotos = (entry.photoIds || []).some(id => this.imageMap[id]);
       const note = (entry.detail || '').trim();
       const empty = !hasContent(cat, entry);
       return '<div class="report-section">' +
         '<div class="section-title">' + e(cat[lang] || cat.en) + '</div>' +
-        (cat.dims ? dimsHtml(entry) : '') +
         (note ? '<div class="report-detail">' + e(note).replace(/\n/g, '<br>') + '</div>' : '') +
-        this._photoGrid(entry.photoIds) +
+        (cat.dims ? dimsHtml(entry) : this._photoGrid(entry.photoIds)) +
         (!cat.dims && empty ? '<div class="report-detail report-na">' + NA + '</div>' : '') +
-        (cat.dims && !hasPhotos ? '<div class="report-detail report-na">' + this._txt('照片：', 'Photos: ') + NA + '</div>' : '') +
         '</div>';
     };
 
@@ -246,9 +261,9 @@ const Report = {
     // Photos not attached to any measurement category
     const used = new Set();
     boxNums.forEach(b => Object.keys(boxes[b] || {}).forEach(c => {
-      ((boxes[b][c] || {}).photoIds || []).forEach(id => used.add(id));
+      this._entryPhotoIds(boxes[b][c]).forEach(id => used.add(id));
     }));
-    Object.keys(assembly).forEach(c => ((assembly[c] || {}).photoIds || []).forEach(id => used.add(id)));
+    Object.keys(assembly).forEach(c => this._entryPhotoIds(assembly[c]).forEach(id => used.add(id)));
     const loose = (d.photos || []).filter(id => !used.has(id));
     const looseHtml = this._photoGrid(loose)
       ? '<div class="report-section"><div class="section-title">' + this._txt('现场照片', 'Site Photos') + '</div>' +
