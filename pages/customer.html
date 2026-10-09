@@ -91,13 +91,15 @@ function isSubmitted(d) { return d && (d.status === 'submitted' || d.status === 
 function typeOf(d) { return d && d.type === 'sample' ? 'sample' : 'psi'; }
 function typeLabel(t) { return t === 'sample' ? 'Sample' : 'PSI'; }
 function fmtDate(v) {
+  // Day/Month/Year, e.g. 06/10/2026
   if (!v) return '';
+  const p = n => String(n).padStart(2, '0');
   if (typeof v === 'number') {
     const dt = new Date(v);
-    const p = n => String(n).padStart(2, '0');
-    return dt.getFullYear() + '-' + p(dt.getMonth() + 1) + '-' + p(dt.getDate());
+    return p(dt.getDate()) + '/' + p(dt.getMonth() + 1) + '/' + dt.getFullYear();
   }
-  return String(v).slice(0, 10);
+  const m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? m[3] + '/' + m[2] + '/' + m[1] : String(v).slice(0, 10);
 }
 function submittedDate(d) { return fmtDate(d.submittedAt) || fmtDate(d.timestamp) || fmtDate(d.inspectionDate); }
 function customerName(d) { return (d.customer || '').trim(); }
