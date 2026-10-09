@@ -159,9 +159,22 @@ const MEASURE_CATEGORIES = [
 // They live in measurements.assembly[key] and use the pseudo-box id "global".
 const GLOBAL_CATEGORIES = [
   { key: 'fully_assembly', zh: '完整装配', en: 'Fully Assembly', notes: false },
-  { key: 'dimension_assembly', zh: '装配尺寸', en: 'Dimension Assembly', dims: true, notes: false }
+  { key: 'dimension_assembly', zh: '装配尺寸', en: 'Dimension Assembly', dims: true, notes: false },
+  { key: 'weight_of_product', zh: '产品重量 (Weight of Product)', en: 'Weight of Product', netWeight: true },
+  { key: 'drop_test', zh: '跌落测试 (Drop Test)', en: 'Drop Test' },
+  { key: 'drop_test_result', zh: '跌落测试检验结果 (Drop Test Inspection Result)', en: 'Drop Test Inspection Result', result: true }
+];
+// Construction Test is one section that holds several test items (each with its
+// own photos + note) plus any custom items added with the "+" button.
+const CONSTRUCTION_KEY = 'construction_test';
+const CONSTRUCTION_TITLE = { zh: '结构测试 (Construction Test)', en: 'Construction Test' };
+const CONSTRUCTION_ITEMS = [
+  { key: 'strength_test', zh: '强度测试 (Strength Test)', en: 'Strength Test' },
+  { key: 'static_test', zh: '静态测试 (Static Test)', en: 'Static Test' },
+  { key: 'moisture_test', zh: '湿度测试 (Moisture Test)', en: 'Moisture Test' }
 ];
 const GLOBAL_BOX = 'global';
+const T = (k, fb) => (window.t ? window.t(k) : fb);
 const DIM_FIELDS = ['length', 'height', 'width', 'weight'];
 
 const BTeam = {
@@ -595,6 +608,14 @@ const BTeam = {
       if (cat.dims && !m.assembly[cat.key].dims) m.assembly[cat.key].dims = this._emptyEntry(true).dims;
     });
 
+    CONSTRUCTION_ITEMS.forEach(it => {
+      if (!m.assembly[it.key]) m.assembly[it.key] = this._emptyEntry(false);
+    });
+    if (!Array.isArray(m.constructionCustom)) m.constructionCustom = [];
+    m.constructionCustom.forEach(k => {
+      if (!m.assembly[k]) m.assembly[k] = Object.assign(this._emptyEntry(false), { title: '', custom: true });
+    });
+
     const boxCount = Math.max(1, parseInt(this.sessionData.boxCount, 10) || 1);
     for (let b = 1; b <= boxCount; b++) {
       if (!m.boxes[b]) m.boxes[b] = {};
@@ -718,8 +739,24 @@ const BTeam = {
     const block = (box, cat, entry, withNotes) => {
       const label = lang === 'en' ? cat.en : cat.zh;
       let h = `
-          <div class="category-block">
+          <div class="category-block">`;
+      if (cat.custom) {
+        h += `
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+              <input class="form-control custom-title" style="flex:1;" type="text" data-i18n-placeholder="measure.custom_title_ph" placeholder="${this._esc(T('measure.custom_title_ph', 'Title, e.g. anmo test'))}" value="${this._esc(entry.title || '')}" oninput="BTeam.updateCustomTitle('${cat.key}', this.value)" />
+              <button type="button" class="btn btn-secondary" style="padding:6px 12px;" aria-label="Remove" onclick="BTeam.removeCustomItem('${cat.key}')">✕</button>
+            </div>`;
+      } else {
+        h += `
             <div class="category-label">${this._esc(label)}</div>`;
+      }
+      if (cat.netWeight) {
+        h += `
+            <label class="dim-field" style="margin-bottom:10px;">
+              <span class="dim-label" data-i18n="measure.net_weight">${this._esc(T('measure.net_weight', 'Net Weight'))}</span>
+              <input class="form-control" type="text" inputmode="decimal" value="${this._esc(entry.netWeight || '')}" oninput="BTeam.updateNetWeight('${box}', '${cat.key}', this.value)" />
+            </label>`;
+      }
       const zoneHtml = (field, list) => {
         let z = `
             <div class="dropzone" data-role="dropzone" data-box="${box}" data-cat="${cat.key}"${field ? ` data-field="${field}"` : ''}>`;
@@ -741,6 +778,17 @@ const BTeam = {
         });
       } else {
         h += zoneHtml('', entry.photoIds);
+      }
+      if (cat.result) {
+        const btn = (val, color, txt) => {
+          const on = entry.result === val;
+          return `<button type="button" data-result-btn="${val}" onclick="BTeam.setTestResult('${box}', '${cat.key}', '${val}')" style="flex:1;padding:10px 12px;border-radius:8px;font-weight:700;cursor:pointer;border:1.5px solid ${color};background:${on ? color : 'transparent'};color:${on ? '#fff' : color};">${txt}</button>`;
+        };
+        h += `
+            <div style="display:flex;align-items:center;gap:8px;margin:10px 0;" data-result-for="${cat.key}">
+              <span class="dim-label" style="white-space:nowrap;" data-i18n="measure.result">${this._esc(T('measure.result', 'Result'))}</span>:
+              ${btn('pass', '#14b8a6', this._esc(T('measure.pass', 'Pass')))}${btn('fail', '#e53935', this._esc(T('measure.fail', 'Fail')))}
+            </div>`;
       }
       if (withNotes) {
         h += `
@@ -774,8 +822,75 @@ const BTeam = {
       const title = this._esc(lang === 'en' ? cat.en : cat.zh);
       html += section(cat.key, `<span>${title}</span>`, block(GLOBAL_BOX, { ...cat, zh: '', en: '' }, entry, cat.notes !== false));
     });
+    // Construction Test: fixed items + custom items, with a "+" button
+    const m2 = this.sessionData.measurements;
+    let cInner = CONSTRUCTION_ITEMS.map(it =>
+      block(GLOBAL_BOX, it, m2.assembly[it.key], true)).join('');
+    m2.constructionCustom.forEach(k => {
+      cInner += block(GLOBAL_BOX, { key: k, zh: '', en: '', custom: true }, m2.assembly[k], true);
+    });
+    cInner += `<button type="button" class="btn btn-secondary" style="width:100%;padding:12px;font-size:15px;" onclick="BTeam.addCustomItem()"><span style="font-size:18px;font-weight:700;">+</span> <span data-i18n="measure.add_item">${this._esc(T('measure.add_item', 'Add item'))}</span></button>`;
+    html += section(CONSTRUCTION_KEY, `<span>${this._esc(lang === 'en' ? CONSTRUCTION_TITLE.en : CONSTRUCTION_TITLE.zh)}</span>`, cInner);
     html += `</div>`;
     return html;
+  },
+
+  updateNetWeight(box, cat, value) {
+    const entry = this._getEntry(box, cat);
+    if (!entry) return;
+    entry.netWeight = value.trim();
+    this._persist();
+  },
+
+  setTestResult(box, cat, val) {
+    const entry = this._getEntry(box, cat);
+    if (!entry) return;
+    entry.result = entry.result === val ? '' : val;      // tap again to clear
+    this._persist();
+    document.querySelectorAll('[data-result-for="' + cat + '"] [data-result-btn]').forEach(b => {
+      const v = b.dataset.resultBtn, color = v === 'pass' ? '#14b8a6' : '#e53935', on = entry.result === v;
+      b.style.background = on ? color : 'transparent';
+      b.style.color = on ? '#fff' : color;
+    });
+  },
+
+  async addCustomItem() {
+    this._ensureMeasurements();
+    const m = this.sessionData.measurements;
+    const key = 'ct_custom_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 4);
+    m.assembly[key] = Object.assign(this._emptyEntry(false), { title: '', custom: true });
+    m.constructionCustom.push(key);
+    this._expandedBoxes.add(CONSTRUCTION_KEY);
+    await this._persist();
+    await this._renderStepContent(this.currentStep);
+    const inputs = document.querySelectorAll('#boxBody' + CONSTRUCTION_KEY + ' .custom-title');
+    const last = inputs[inputs.length - 1];
+    if (last) { last.scrollIntoView({ block: 'center' }); last.focus(); }
+  },
+
+  updateCustomTitle(key, value) {
+    const entry = this._getEntry(GLOBAL_BOX, key);
+    if (!entry) return;
+    entry.title = value;
+    this._persist();
+  },
+
+  async removeCustomItem(key) {
+    const m = this.sessionData.measurements;
+    const entry = m && m.assembly && m.assembly[key];
+    if (!entry) return;
+    const hasContent = (entry.title || '').trim() || (entry.detail || '').trim() || (entry.photoIds || []).length;
+    if (hasContent && !confirm(T('measure.remove_item_confirm', 'Remove this item? Its photos go back to the uploaded photos.'))) return;
+    delete m.assembly[key];      // photos are no longer assigned, so they return to the pool
+    m.constructionCustom = m.constructionCustom.filter(k => k !== key);
+    await this._persist();
+    await this._renderStepContent(this.currentStep);
+  },
+
+  async _persist() {
+    if (typeof StorageAdapter !== 'undefined' && this.sessionId) {
+      await StorageAdapter.saveSession(this.sessionId, this.sessionData);
+    }
   },
 
   toggleBox(b) {
