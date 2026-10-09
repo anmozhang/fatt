@@ -574,7 +574,11 @@ const BTeam = {
 
   _emptyEntry(withDims) {
     const e = { photoIds: [], detail: '' };
-    if (withDims) e.dims = { length: '', height: '', width: '', weight: '' };
+    if (withDims) {
+      e.dims = { length: '', height: '', width: '', weight: '' };
+      // Each of Length / Height / Width / Weight has its own photo drop zone
+      e.dimPhotos = { length: [], height: [], width: [], weight: [] };
+    }
     return e;
   },
 
@@ -612,6 +616,18 @@ const BTeam = {
         delete m.boxes[b][cat.key];
       });
     });
+
+    // Dimension sections now keep photos per field (Length / Height / Width /
+    // Weight). Photos that older drafts dropped into the single zone are
+    // released back to the "Uploaded photos" pool so they can be re-assigned.
+    const fixDims = (entry) => {
+      if (!entry) return;
+      if (!entry.dimPhotos) entry.dimPhotos = { length: [], height: [], width: [], weight: [] };
+      DIM_FIELDS.forEach(f => { if (!Array.isArray(entry.dimPhotos[f])) entry.dimPhotos[f] = []; });
+      if (entry.photoIds && entry.photoIds.length) entry.photoIds = [];
+    };
+    Object.keys(m.boxes).forEach(b => MEASURE_CATEGORIES.forEach(cat => { if (cat.dims) fixDims(m.boxes[b][cat.key]); }));
+    GLOBAL_CATEGORIES.forEach(cat => { if (cat.dims) fixDims(m.assembly[cat.key]); });
     return boxCount;
   },
 
@@ -623,17 +639,35 @@ const BTeam = {
     return (m.boxes && m.boxes[box] && m.boxes[box][cat]) || null;
   },
 
+  // Photo list a drop zone writes to: the entry's own list, or one dimension field's list.
+  _zoneList(entry, field) {
+    if (!entry) return null;
+    if (field) {
+      if (!entry.dimPhotos) entry.dimPhotos = { length: [], height: [], width: [], weight: [] };
+      if (!Array.isArray(entry.dimPhotos[field])) entry.dimPhotos[field] = [];
+      return entry.dimPhotos[field];
+    }
+    if (!Array.isArray(entry.photoIds)) entry.photoIds = [];
+    return entry.photoIds;
+  },
+
+  _entryPhotoIds(entry) {
+    const ids = [...((entry && entry.photoIds) || [])];
+    if (entry && entry.dimPhotos) Object.keys(entry.dimPhotos).forEach(f => ids.push(...(entry.dimPhotos[f] || [])));
+    return ids;
+  },
+
   _getAssignedPhotoIds() {
     const assigned = new Set();
     const m = this.sessionData.measurements || {};
     const boxes = m.boxes || {};
     Object.keys(boxes).forEach(b => {
       Object.keys(boxes[b]).forEach(cat => {
-        (boxes[b][cat].photoIds || []).forEach(id => assigned.add(id));
+        this._entryPhotoIds(boxes[b][cat]).forEach(id => assigned.add(id));
       });
     });
     Object.keys(m.assembly || {}).forEach(cat => {
-      ((m.assembly[cat] || {}).photoIds || []).forEach(id => assigned.add(id));
+      this._entryPhotoIds(m.assembly[cat]).forEach(id => assigned.add(id));
     });
     return assigned;
   },
@@ -685,26 +719,28 @@ const BTeam = {
       let h = `
           <div class="category-block">
             <div class="category-label">${this._esc(label)}</div>`;
+      const zoneHtml = (field, list) => {
+        let z = `
+            <div class="dropzone" data-role="dropzone" data-box="${box}" data-cat="${cat.key}"${field ? ` data-field="${field}"` : ''}>`;
+        if (!list || list.length === 0) z += `<div class="dropzone-empty-hint">${this._esc(noPhotosText)}</div>`;
+        else list.forEach(id => { z += this._photoThumbHtml(id, imgMap[id]); });
+        return z + `</div>`;
+      };
       if (cat.dims) {
-        h += `<div class="dims-grid">`;
+        // One input + one drop zone for each of Length / Height / Width / Weight
         DIM_FIELDS.forEach(f => {
           const v = (entry.dims && entry.dims[f]) || '';
           h += `
+            <div class="dim-block" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;">
               <label class="dim-field">
                 <span class="dim-label" data-i18n="measure.dim.${f}">${f}</span>
                 <input class="form-control" type="text" inputmode="decimal" value="${this._esc(v)}" oninput="BTeam.updateMeasureDim('${box}', '${cat.key}', '${f}', this.value)" />
-              </label>`;
+              </label>${zoneHtml(f, entry.dimPhotos && entry.dimPhotos[f])}
+            </div>`;
         });
-        h += `</div>`;
-      }
-      h += `
-            <div class="dropzone" data-role="dropzone" data-box="${box}" data-cat="${cat.key}">`;
-      if (!entry.photoIds || entry.photoIds.length === 0) {
-        h += `<div class="dropzone-empty-hint">${this._esc(noPhotosText)}</div>`;
       } else {
-        entry.photoIds.forEach(id => { h += this._photoThumbHtml(id, imgMap[id]); });
+        h += zoneHtml('', entry.photoIds);
       }
-      h += `</div>`;
       if (withNotes) {
         h += `
             <textarea class="form-control category-detail" placeholder="${this._esc(detailPlaceholder)}" oninput="BTeam.updateMeasureDetail('${box}', '${cat.key}', this.value)">${this._esc(entry.detail || '')}</textarea>`;
@@ -786,6 +822,7 @@ const BTeam = {
     const originZone = el.closest('[data-role]');
     const originBox = originZone ? (originZone.dataset.box || null) : null;
     const originCat = originZone ? (originZone.dataset.cat || null) : null;
+    const originField = originZone ? (originZone.dataset.field || '') : '';
 
     const rect = el.getBoundingClientRect();
     const ghost = el.cloneNode(true);
@@ -895,7 +932,8 @@ const BTeam = {
       if (target) {
         const toBox = target.dataset.box || null;
         const toCat = target.dataset.cat || null;
-        await this._movePhoto(photoId, originBox, originCat, toBox, toCat);
+        const toField = target.dataset.field || '';
+        await this._movePhoto(photoId, originBox, originCat, originField, toBox, toCat, toField);
       }
     };
 
@@ -904,16 +942,21 @@ const BTeam = {
     document.addEventListener('pointercancel', onUp);
   },
 
-  async _movePhoto(photoId, fromBox, fromCat, toBox, toCat) {
-    if (fromBox === toBox && fromCat === toCat) return;
+  async _movePhoto(photoId, fromBox, fromCat, fromField, toBox, toCat, toField) {
+    if (fromBox === toBox && fromCat === toCat && (fromField || '') === (toField || '')) return;
     if (fromBox && fromCat) {
       const src = this._getEntry(fromBox, fromCat);
-      if (src) src.photoIds = (src.photoIds || []).filter(id => id !== photoId);
+      const list = this._zoneList(src, fromField);
+      if (list) {
+        const keep = list.filter(id => id !== photoId);
+        list.length = 0; keep.forEach(id => list.push(id));
+      }
     }
     if (toBox && toCat) {
       this._ensureMeasurements();
       const dest = this._getEntry(toBox, toCat);
-      if (dest && !dest.photoIds.includes(photoId)) dest.photoIds.push(photoId);
+      const list = this._zoneList(dest, toField);
+      if (list && !list.includes(photoId)) list.push(photoId);
     }
     if (typeof StorageAdapter !== 'undefined' && this.sessionId) {
       await StorageAdapter.saveSession(this.sessionId, this.sessionData);
@@ -978,6 +1021,7 @@ const BTeam = {
           Object.keys(boxes[b]).forEach(cat => {
             const entry = boxes[b][cat];
             if (entry && entry.photoIds) entry.photoIds = entry.photoIds.filter(id => id !== photoId);
+            if (entry && entry.dimPhotos) Object.keys(entry.dimPhotos).forEach(f => { entry.dimPhotos[f] = (entry.dimPhotos[f] || []).filter(id => id !== photoId); });
           });
         });
       }
@@ -985,6 +1029,7 @@ const BTeam = {
         Object.keys(m.assembly).forEach(cat => {
           const entry = m.assembly[cat];
           if (entry && entry.photoIds) entry.photoIds = entry.photoIds.filter(id => id !== photoId);
+          if (entry && entry.dimPhotos) Object.keys(entry.dimPhotos).forEach(f => { entry.dimPhotos[f] = (entry.dimPhotos[f] || []).filter(id => id !== photoId); });
         });
       }
       if (typeof StorageAdapter !== 'undefined' && this.sessionId) {
