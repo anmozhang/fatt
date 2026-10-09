@@ -160,6 +160,7 @@ const MEASURE_CATEGORIES = [
 const GLOBAL_CATEGORIES = [
   { key: 'fully_assembly', zh: '完整装配', en: 'Fully Assembly', notes: false },
   { key: 'dimension_assembly', zh: '装配尺寸', en: 'Dimension Assembly', dims: true, notes: false },
+  { key: 'assembly_weight', zh: '重量 (Weight)', en: 'Weight', grossWeight: true },
   { key: 'weight_of_product', zh: '产品重量 (Weight of Product)', en: 'Weight of Product', netWeight: true },
   { key: 'drop_test', zh: '跌落测试 (Drop Test)', en: 'Drop Test' },
   { key: 'drop_test_result', zh: '跌落测试检验结果 (Drop Test Inspection Result)', en: 'Drop Test Inspection Result', result: true }
@@ -175,7 +176,10 @@ const CONSTRUCTION_ITEMS = [
 ];
 const GLOBAL_BOX = 'global';
 const T = (k, fb) => (window.t ? window.t(k) : fb);
-const DIM_FIELDS = ['length', 'height', 'width', 'weight'];
+const DIM_FIELDS = ['length', 'width', 'height'];
+// Weight now lives in its own "Weight" section (Gross Weight + photos + note),
+// shown right after each Box and after Dimension Assembly.
+const BOX_WEIGHT = { key: 'carton_weight', zh: '重量 (Weight)', en: 'Weight', grossWeight: true };
 
 const BTeam = {
   currentStep: 0,
@@ -595,9 +599,9 @@ const BTeam = {
   _emptyEntry(withDims) {
     const e = { photoIds: [], detail: '' };
     if (withDims) {
-      e.dims = { length: '', height: '', width: '', weight: '' };
+      e.dims = { length: '', width: '', height: '' };
       // Each of Length / Height / Width / Weight has its own photo drop zone
-      e.dimPhotos = { length: [], height: [], width: [], weight: [] };
+      e.dimPhotos = { length: [], width: [], height: [] };
     }
     return e;
   },
@@ -645,12 +649,29 @@ const BTeam = {
       });
     });
 
+    // Weight moved out of the dimension sections into its own Weight section:
+    // carry any weight value / photos entered earlier over to it.
+    const moveWeight = (dimEntry, wEntry) => {
+      if (!dimEntry || !wEntry) return;
+      const w = dimEntry.dims && dimEntry.dims.weight;
+      if (w != null && String(w).trim() && !wEntry.grossWeight) wEntry.grossWeight = String(w).trim();
+      if (dimEntry.dims) delete dimEntry.dims.weight;
+      const ph = dimEntry.dimPhotos && dimEntry.dimPhotos.weight;
+      if (ph && ph.length) ph.forEach(id => { if (!wEntry.photoIds.includes(id)) wEntry.photoIds.push(id); });
+      if (dimEntry.dimPhotos) delete dimEntry.dimPhotos.weight;
+    };
+    for (let b = 1; b <= boxCount; b++) {
+      if (!m.boxes[b][BOX_WEIGHT.key]) m.boxes[b][BOX_WEIGHT.key] = this._emptyEntry(false);
+      moveWeight(m.boxes[b].carton_dimension_weight, m.boxes[b][BOX_WEIGHT.key]);
+    }
+    moveWeight(m.assembly.dimension_assembly, m.assembly.assembly_weight);
+
     // Dimension sections now keep photos per field (Length / Height / Width /
     // Weight). Photos that older drafts dropped into the single zone are
     // released back to the "Uploaded photos" pool so they can be re-assigned.
     const fixDims = (entry) => {
       if (!entry) return;
-      if (!entry.dimPhotos) entry.dimPhotos = { length: [], height: [], width: [], weight: [] };
+      if (!entry.dimPhotos) entry.dimPhotos = { length: [], width: [], height: [] };
       DIM_FIELDS.forEach(f => { if (!Array.isArray(entry.dimPhotos[f])) entry.dimPhotos[f] = []; });
       if (entry.photoIds && entry.photoIds.length) entry.photoIds = [];
     };
@@ -671,7 +692,7 @@ const BTeam = {
   _zoneList(entry, field) {
     if (!entry) return null;
     if (field) {
-      if (!entry.dimPhotos) entry.dimPhotos = { length: [], height: [], width: [], weight: [] };
+      if (!entry.dimPhotos) entry.dimPhotos = { length: [], width: [], height: [] };
       if (!Array.isArray(entry.dimPhotos[field])) entry.dimPhotos[field] = [];
       return entry.dimPhotos[field];
     }
@@ -756,11 +777,14 @@ const BTeam = {
         h += `
             <div class="category-label">${this._esc(label)}</div>`;
       }
-      if (cat.netWeight) {
+      if (cat.netWeight || cat.grossWeight) {
+        const prop = cat.netWeight ? 'netWeight' : 'grossWeight';
+        const lk = cat.netWeight ? 'measure.net_weight' : 'measure.gross_weight';
+        const lf = cat.netWeight ? 'Net Weight' : 'Gross Weight';
         h += `
             <label class="dim-field" style="margin-bottom:10px;">
-              <span class="dim-label" data-i18n="measure.net_weight">${this._esc(T('measure.net_weight', 'Net Weight'))}</span>
-              <input class="form-control" type="text" inputmode="decimal" value="${this._esc(entry.netWeight || '')}" oninput="BTeam.updateNetWeight('${box}', '${cat.key}', this.value)" />
+              <span class="dim-label" data-i18n="${lk}">${this._esc(T(lk, lf))}</span>
+              <input class="form-control" type="text" inputmode="decimal" value="${this._esc(entry[prop] || '')}" oninput="BTeam.updateWeightField('${box}', '${cat.key}', '${prop}', this.value)" />
             </label>`;
       }
       const zoneHtml = (field, list) => {
@@ -821,6 +845,8 @@ const BTeam = {
         block(b, cat, this.sessionData.measurements.boxes[b][cat.key], !cat.dims)
       ).join('');
       html += section(b, `<span data-i18n="measure.box">箱</span> ${b}`, inner);
+      html += section('weight' + b, `<span>${this._esc(lang === 'en' ? BOX_WEIGHT.en : BOX_WEIGHT.zh)}</span>`,
+        block(b, { ...BOX_WEIGHT, zh: '', en: '' }, this.sessionData.measurements.boxes[b][BOX_WEIGHT.key], true));
     }
     // Independent sections, shown once after the boxes
     GLOBAL_CATEGORIES.forEach(cat => {
@@ -841,10 +867,10 @@ const BTeam = {
     return html;
   },
 
-  updateNetWeight(box, cat, value) {
+  updateWeightField(box, cat, prop, value) {
     const entry = this._getEntry(box, cat);
-    if (!entry) return;
-    entry.netWeight = value.trim();
+    if (!entry || (prop !== 'netWeight' && prop !== 'grossWeight')) return;
+    entry[prop] = value.trim();
     this._persist();
   },
 
