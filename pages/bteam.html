@@ -6,8 +6,8 @@
 <meta name="theme-color" content="#1a1a1a" />
 <title data-i18n="role.bteam.name">Get Start</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E📸%3C/text%3E%3C/svg%3E" />
-<link rel="stylesheet" href="../assets/css/main.css" />
-<link rel="stylesheet" href="../assets/css/bteam.css" />
+<link rel="stylesheet" href="../assets/css/main.css?v=202610090612" />
+<link rel="stylesheet" href="../assets/css/bteam.css?v=202610090612" />
 </head>
 <body class="theme-light">
 
@@ -125,8 +125,8 @@
 
 </div>
 
-<script src="../assets/js/i18n.js"></script>
-<script src="../assets/js/storage/storage-adapter.js"></script>
+<script src="../assets/js/i18n.js?v=202610090612"></script>
+<script src="../assets/js/storage/storage-adapter.js?v=202610090612"></script>
 <script>
 const STEPS = [
   { key: 'setup', i18n: 'bteam.step.setup', label: '基本信息' },
@@ -175,7 +175,7 @@ const CONSTRUCTION_ITEMS = [
   { key: 'moisture_test', zh: '湿度测试 (Moisture Test)', en: 'Moisture Test' }
 ];
 const GLOBAL_BOX = 'global';
-const T = (k, fb) => (window.t ? window.t(k) : fb);
+const T = (k, fb) => { const v = window.t ? window.t(k) : fb; return (v && v !== k) ? v : fb; };
 const DIM_FIELDS = ['length', 'width', 'height'];
 // Weight now lives in its own "Weight" section (Gross Weight + photos + note),
 // shown right after each Box and after Dimension Assembly.
@@ -770,7 +770,7 @@ const BTeam = {
       if (cat.custom) {
         h += `
             <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
-              <input class="form-control custom-title" style="flex:1;" type="text" data-i18n-placeholder="measure.custom_title_ph" placeholder="${this._esc(T('measure.custom_title_ph', 'Title, e.g. anmo test'))}" value="${this._esc(entry.title || '')}" oninput="BTeam.updateCustomTitle('${cat.key}', this.value)" />
+              <input class="form-control custom-title" style="flex:1;" type="text" placeholder="${this._esc(T('measure.custom_title_ph', 'Title, e.g. anmo test'))}" value="${this._esc(entry.title || '')}" oninput="BTeam.updateCustomTitle('${cat.key}', this.value)" />
               <button type="button" class="btn btn-secondary" style="padding:6px 12px;" aria-label="Remove" onclick="BTeam.removeCustomItem('${cat.key}')">✕</button>
             </div>`;
       } else {
@@ -783,7 +783,7 @@ const BTeam = {
         const lf = cat.netWeight ? 'Net Weight' : 'Gross Weight';
         h += `
             <label class="dim-field" style="margin-bottom:10px;">
-              <span class="dim-label" data-i18n="${lk}">${this._esc(T(lk, lf))}</span>
+              <span class="dim-label">${this._esc(T(lk, lf))}</span>
               <input class="form-control" type="text" inputmode="decimal" value="${this._esc(entry[prop] || '')}" oninput="BTeam.updateWeightField('${box}', '${cat.key}', '${prop}', this.value)" />
             </label>`;
       }
@@ -816,7 +816,7 @@ const BTeam = {
         };
         h += `
             <div style="display:flex;align-items:center;gap:8px;margin:10px 0;" data-result-for="${cat.key}">
-              <span class="dim-label" style="white-space:nowrap;" data-i18n="measure.result">${this._esc(T('measure.result', 'Result'))}</span>:
+              <span class="dim-label" style="white-space:nowrap;">${this._esc(T('measure.result', 'Result'))}</span>:
               ${btn('pass', '#14b8a6', this._esc(T('measure.pass', 'Pass')))}${btn('fail', '#e53935', this._esc(T('measure.fail', 'Fail')))}
             </div>`;
       }
@@ -861,7 +861,7 @@ const BTeam = {
     m2.constructionCustom.forEach(k => {
       cInner += block(GLOBAL_BOX, { key: k, zh: '', en: '', custom: true }, m2.assembly[k], true);
     });
-    cInner += `<button type="button" class="btn btn-secondary" style="width:100%;padding:12px;font-size:15px;" onclick="BTeam.addCustomItem()"><span style="font-size:18px;font-weight:700;">+</span> <span data-i18n="measure.add_item">${this._esc(T('measure.add_item', 'Add item'))}</span></button>`;
+    cInner += `<button type="button" class="btn btn-secondary" style="width:100%;padding:12px;font-size:15px;" onclick="BTeam.addCustomItem()"><span style="font-size:18px;font-weight:700;">+</span> <span>${this._esc(T('measure.add_item', 'Add item'))}</span></button>`;
     html += section(CONSTRUCTION_KEY, `<span>${this._esc(lang === 'en' ? CONSTRUCTION_TITLE.en : CONSTRUCTION_TITLE.zh)}</span>`, cInner);
     html += `</div>`;
     return html;
