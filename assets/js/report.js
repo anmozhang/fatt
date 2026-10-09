@@ -8,6 +8,7 @@
 // Per-box categories
 const MEASURE_CATEGORIES = [
   { key: 'carton_dimension_weight', zh: '箱体尺寸与重量', en: 'Dimension Carton & Weight', dims: true },
+  { key: 'carton_marking_barcode', zh: '箱唛与条码', en: 'Carton Shipping Marking & Barcode' },
   { key: 'every_panel', zh: '内部包装', en: 'Internal Packaging' },
   { key: 'assembly_instruction', zh: '装配说明', en: 'Assembly Instruction' },
   { key: 'accessories', zh: '配件', en: 'Accessories' },
