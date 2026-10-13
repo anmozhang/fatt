@@ -49,6 +49,16 @@ const Report = {
   imageMap: {},   // photoId -> data URL
   _busy: false,
 
+  // Dates are always printed as DD/MM/YYYY
+  _dmy(v) {
+    const m = String(v == null ? '' : v).match(/^(\d{4})-(\d{2})-(\d{2})(.*)$/);
+    return m ? m[3] + '/' + m[2] + '/' + m[1] + m[4] : String(v == null ? '' : v);
+  },
+  _dmyTime(ms) {
+    const d = new Date(ms), p = n => String(n).padStart(2, '0');
+    return p(d.getDate()) + '/' + p(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+  },
+
   _lang() {
     return (window.I18n && I18n.current) || 'zh';
   },
@@ -185,9 +195,7 @@ const Report = {
     const dash = v => (v == null || String(v).trim() === '' || v === '-' ? NA : e(v));
     const typeKey = d.type ? 'form.type.' + d.type : null;
     const typeText = typeKey && window.t ? t(typeKey) : (d.type || '-');
-    const date = d.inspectionDate
-      ? InspectionCore.Utils.formatDate(d.inspectionDate, lang)
-      : '';
+    const date = d.inspectionDate ? this._dmy(d.inspectionDate) : '';
 
     const resultLabel = this._resultLabel();
     // Overall Result sits right under Supplier: teal highlight for Pass, red for Fail
@@ -205,7 +213,7 @@ const Report = {
       [this._txt('PI 号', 'PI No.'), dash(d.pi), this._txt('批次', 'Batch'), dash(d.batch)],
       [this._txt('型号', 'Model'), dash(d.model), this._txt('版本', 'Version'), dash(d.version)],
       [this._txt('颜色', 'Color'), dash(d.color), this._txt('检验类型', 'Inspection Type'), dash(typeText)],
-      [this._txt('箱数', 'Box Count'), dash(d.boxCount), this._txt('提交时间', 'Submitted'), dash(d.submittedAt ? new Date(d.submittedAt).toLocaleString(lang === 'zh' ? 'zh-CN' : 'en-GB', { hour12: false }) : d.timestamp)],
+      [this._txt('箱数', 'Box Count'), dash(d.boxCount), this._txt('提交时间', 'Submitted'), dash(d.submittedAt ? this._dmyTime(d.submittedAt) : this._dmy(d.timestamp))],
       [this._txt('检验人', 'Inspection By'), dash(d.inspectionBy), this._txt('PO 号 / 订单号', 'PO No / Order No'), dash(d.poNo)],
       [this._txt('总数量', 'Total Quantity'), dash(d.totalQuantity), this._txt('抽样数量', 'Sample Size'), dash(d.sampleSize)]
     ].map(r => '<tr><td>' + r[0] + '</td><td>' + r[1] + '</td><td>' + r[2] + '</td><td>' + r[3] + '</td></tr>').join('') +
@@ -349,14 +357,14 @@ const Report = {
       '<div class="report-section"><div class="section-title">' + this._txt('尺寸测量', 'Measurements') + '</div></div>' + measureHtml +
       looseHtml +
       '<div class="report-footer"><span></span>' +
-      '<span>' + e(new Date().toLocaleDateString(lang === 'zh' ? 'zh-CN' : 'en-US')) + '</span></div>';
+      '<span>' + e(this._dmyTime(Date.now()).slice(0, 10)) + '</span></div>';
     this._updatePdfState();
   },
 
   _fileName() {
     const d = this.data || {};
     const clean = s => String(s || '').replace(/[\\/:*?"<>|\s]+/g, '_').replace(/^_+|_+$/g, '');
-    const parts = ['Inspection_Report', clean(d.customer), this._resultLabel(), clean(d.inspectionDate)].filter(Boolean);
+    const parts = ['Inspection_Report', clean(d.customer), this._resultLabel(), clean(this._dmy(d.inspectionDate).replace(/\//g, '-'))].filter(Boolean);
     return parts.join('_') + '.pdf';
   },
 
