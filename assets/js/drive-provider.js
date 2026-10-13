@@ -12,11 +12,16 @@
    StorageAdapter.registerProvider({
      name: 'My Drive',
      save(key, record) { },        // key 'session_<id>', record { data, updatedAt }
-     remove(key) { },              // an inspection was deleted
+     remove(key, deletedAt) { },   // an inspection was deleted at that time (ms). Keep a
+                                   // record of the deletion; a missing file is not enough
      saveImage(key, dataUrl) { },  // key '<sessionId>_<photoId>'
      removeImage(key) { },
-     pull() { return { sessions: {}, images: {} }; } // called when the landing page opens
+     pull() { return { sessions: {}, images: {}, deleted: {} }; } // called when the landing page opens
+                                   // deleted: { 'session_<id>': deletedAt }
    });
+
+   Whichever happened last wins: deleted after the last edit = removed everywhere;
+   edited after a delete = it comes back. (Devices should have roughly correct clocks.)
 
    The browser copy is always kept; a failing provider never blocks saving.
    Failures are reported to StorageAdapter.onProviderError(op, error).
