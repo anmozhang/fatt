@@ -8,6 +8,11 @@ zh: {
 'landing.subtitle': '质量检验数字化系统 · 私人内部使用',
 'landing.footer': 'v1.0 · 生产质检系统',
 'status.storage': '存储状态：',
+'backup.title': '数据备份', 'backup.hint': '数据只保存在这个浏览器里。换手机、换浏览器或清除缓存之前，请先导出备份。',
+'backup.export': '导出备份', 'backup.import': '导入备份', 'backup.exported': '已导出：{n} 份检验单、{m} 张照片',
+'backup.nothing': '目前没有可导出的数据', 'backup.confirm': '导入会把备份文件里的检验单和照片加进来，不会删除现在已有的内容；同一份检验单以较新的为准。继续吗？',
+'backup.imported': '导入完成：新增 {a} 份、更新 {u} 份、保留现有较新的 {k} 份；照片 {m} 张', 'backup.partial': '另有 {f} 项没能写入（存储空间可能不足）',
+'backup.invalid': '这个文件不是有效的备份文件', 'backup.failed': '操作失败，请重试',
 'role.bteam.name': 'Get Start',
 'role.bteam.desc': '现场拍照 · 上传照片 · 记录数据',
 
@@ -49,7 +54,7 @@ zh: {
 'photo.delete': '删除照片', 'photo.delete_confirm': '确定删除这张照片？',
 'photo.no_photos': '暂无照片',
 
-'measure.title': '尺寸测量', 'measure.subtitle': '将照片拖拽到对应分类',
+'measure.title': '尺寸测量', 'measure.subtitle': '将照片拖拽到对应分类；点击照片可放大查看',
 'measure.uploaded_photos': '已上传照片', 'measure.box': '箱',
 'measure.gross_weight': '毛重 Gross Weight (kg)', 'measure.net_weight': '净重 Net Weight (kg)', 'measure.result': '结果', 'measure.pass': '合格 (Pass)', 'measure.fail': '不合格 (Fail)',
 'measure.add_item': '添加项目', 'measure.custom_title_ph': '标题，例如：anmo test', 'measure.remove_item_confirm': '删除这个项目吗？里面的照片会回到“已上传照片”。',
@@ -74,6 +79,11 @@ en: {
 'landing.subtitle': 'Digital Quality Inspection System · Private Use',
 'landing.footer': 'v1.0 · Production QC System',
 'status.storage': 'Storage:',
+'backup.title': 'Data Backup', 'backup.hint': 'Your data is stored only in this browser. Export a backup before switching phones or browsers or clearing the cache.',
+'backup.export': 'Export Backup', 'backup.import': 'Import Backup', 'backup.exported': 'Exported: {n} inspections, {m} photos',
+'backup.nothing': 'There is no data to export yet', 'backup.confirm': 'Importing adds the inspections and photos from the file. Nothing already here is deleted; if the same inspection exists, the newer one is kept. Continue?',
+'backup.imported': 'Import done: {a} added, {u} updated, {k} kept (existing was newer); {m} photos', 'backup.partial': '{f} item(s) could not be saved (storage may be full)',
+'backup.invalid': 'This is not a valid backup file', 'backup.failed': 'Something went wrong, please try again',
 'role.bteam.name': 'Get Start', 'role.bteam.desc': 'On-site photos · Upload · Data entry',
 
 'role.customer.name': 'Customer List', 'role.customer.desc': 'View reports · Download PDF · Feedback',
@@ -113,7 +123,7 @@ en: {
 'photo.delete': 'Delete Photo', 'photo.delete_confirm': 'Delete this photo?',
 'photo.no_photos': 'No photos yet',
 
-'measure.title': 'Measurements', 'measure.subtitle': 'Drag photos into the matching category',
+'measure.title': 'Measurements', 'measure.subtitle': 'Drag photos into the matching category; tap a photo to enlarge it',
 'measure.uploaded_photos': 'Uploaded Photos', 'measure.box': 'Box',
 'measure.gross_weight': 'Gross Weight (kg)', 'measure.net_weight': 'Net Weight (kg)', 'measure.result': 'Result', 'measure.pass': 'Pass', 'measure.fail': 'Fail',
 'measure.add_item': 'Add item', 'measure.custom_title_ph': 'Title, e.g. anmo test', 'measure.remove_item_confirm': 'Remove this item? Its photos go back to the uploaded photos.',

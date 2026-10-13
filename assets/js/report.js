@@ -139,6 +139,12 @@ const Report = {
 
     this.render();
 
+    // Tap a photo in the on-screen report to see it larger (the PDF copy is unaffected)
+    document.getElementById('reportRoot').addEventListener('click', (ev) => {
+      const img = ev.target && ev.target.closest ? ev.target.closest('.report-photo img') : null;
+      if (img && window.Lightbox) Lightbox.openFrom(img, '#reportRoot .report-photo img');
+    });
+
     // Re-render when the language is switched (I18n only re-labels data-i18n nodes).
     document.querySelectorAll('.lang-btn').forEach(btn => {
       btn.addEventListener('click', () => setTimeout(() => this.render(), 0));
@@ -284,7 +290,7 @@ const Report = {
         '<div class="section-title"' + titleStyle + '>' + e(cat[lang] || cat.en) + '</div>' + extra +
         (note ? '<div class="report-detail">' + e(note).replace(/\n/g, '<br>') + '</div>' : '') +
         (cat.dims ? dimsHtml(entry) : this._photoGrid(entry.photoIds)) +
-        (!cat.dims && empty ? '<div class="report-detail report-na">' + NA + '</div>' : '') +
+        (!cat.dims && empty && !cat.netWeight && !cat.grossWeight ? '<div class="report-detail report-na">' + NA + '</div>' : '') +
         '</div>';
     };
 
@@ -445,7 +451,7 @@ const Report = {
       return;
     }
     if (typeof html2pdf === 'undefined') {
-      InspectionCore.Utils.toast(this._txt('PDF 组件未能加载，请检查网络后刷新页面', 'PDF library failed to load. Check your connection and reload.'), 'error');
+      InspectionCore.Utils.toast(this._txt('PDF 组件未能加载，请刷新页面后重试', 'PDF library failed to load. Please reload the page and try again.'), 'error');
       return;
     }
     const btn = document.getElementById('downloadPdfBtn');
