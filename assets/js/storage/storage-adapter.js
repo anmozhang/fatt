@@ -108,6 +108,104 @@ const StorageAdapter = {
     return localStorage.getItem(this.prefix + 'img_' + key);
   },
 
+  /* ---- Local backup / restore ----
+     Everything lives in this browser, so the user can save all inspections and
+     photos to a file on their own device and load it back later (new phone,
+     cleared cache, ...). Nothing is sent anywhere. Importing only adds or updates
+     data; it never deletes what is already here. */
+  BACKUP_APP: 'fatt-inspection',
+  BACKUP_VERSION: 1,
+
+  async _allImages() {
+    const out = {};
+    try {
+      const db = await this._openImageDB();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction('images', 'readonly');
+        const req = tx.objectStore('images').openCursor();
+        req.onsuccess = () => {
+          const c = req.result;
+          if (c) { if (typeof c.value === 'string') out[c.key] = c.value; c.continue(); }
+          else resolve();
+        };
+        req.onerror = () => reject(req.error);
+      });
+    } catch (e) { console.warn('[StorageAdapter] could not read photos for backup:', e); }
+    return out;
+  },
+
+  // Returns { blob, sessions, images }; the file is built in pieces so big photo sets stay manageable.
+  async exportBackup() {
+    const local = {};
+    let sessions = 0;
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k || !k.startsWith(this.prefix) || k === this.prefix + 'current_session') continue;
+      local[k] = localStorage.getItem(k);
+      if (k.startsWith(this.prefix + 'session_')) sessions++;
+    }
+    const images = await this._allImages();
+    const keys = Object.keys(images);
+    const parts = [
+      '{"app":' + JSON.stringify(this.BACKUP_APP) + ',"version":' + this.BACKUP_VERSION +
+      ',"createdAt":' + JSON.stringify(new Date().toISOString()) + ',"local":' + JSON.stringify(local) + ',"images":{'
+    ];
+    keys.forEach((k, i) => { parts.push((i ? ',' : '') + JSON.stringify(k) + ':' + JSON.stringify(images[k])); });
+    parts.push('}}');
+    return { blob: new Blob(parts, { type: 'application/json' }), sessions: sessions, images: keys.length };
+  },
+
+  // text: contents of a backup file. Returns { ok, error?, added, updated, kept, images }
+  async importBackup(text) {
+    let b;
+    try { b = JSON.parse(text); } catch (e) { return { ok: false, error: 'invalid' }; }
+    if (!b || b.app !== this.BACKUP_APP || b.version !== this.BACKUP_VERSION ||
+        typeof b.local !== 'object' || b.local === null || typeof b.images !== 'object' || b.images === null) {
+      return { ok: false, error: 'invalid' };
+    }
+    const res = { ok: true, added: 0, updated: 0, kept: 0, images: 0, failed: 0 };
+    const sessionPrefix = this.prefix + 'session_';
+    for (const k of Object.keys(b.local)) {
+      const v = b.local[k];
+      if (typeof v !== 'string' || !k.startsWith(this.prefix) || k === this.prefix + 'current_session') continue;
+      const isSession = k.startsWith(sessionPrefix);
+      try {
+        if (isSession) {
+          const incoming = JSON.parse(v);
+          if (!incoming || typeof incoming.data !== 'object' || incoming.data === null) continue;
+          const existingRaw = localStorage.getItem(k);
+          if (existingRaw === null) { localStorage.setItem(k, v); res.added++; continue; }
+          let existing = null;
+          try { existing = JSON.parse(existingRaw); } catch (_) {}
+          if (!existing || (incoming.updatedAt || 0) > (existing.updatedAt || 0)) { localStorage.setItem(k, v); res.updated++; }
+          else res.kept++;
+        } else if (localStorage.getItem(k) === null) {
+          localStorage.setItem(k, v);
+        }
+      } catch (e) { res.failed++; }
+    }
+    // Photos: add the ones that are missing, never overwrite existing ones
+    try {
+      const db = await this._openImageDB();
+      for (const k of Object.keys(b.images)) {
+        const v = b.images[k];
+        if (typeof v !== 'string' || v.indexOf('data:image/') !== 0) continue;
+        const exists = await new Promise((resolve) => {
+          const r = db.transaction('images', 'readonly').objectStore('images').count(k);
+          r.onsuccess = () => resolve(r.result > 0); r.onerror = () => resolve(false);
+        });
+        if (exists) continue;
+        await new Promise((resolve) => {
+          const tx = db.transaction('images', 'readwrite');
+          tx.objectStore('images').put(v, k);
+          tx.oncomplete = () => { res.images++; resolve(); };
+          tx.onerror = () => { res.failed++; resolve(); };
+        });
+      }
+    } catch (e) { console.warn('[StorageAdapter] could not restore photos:', e); res.failed++; }
+    return res;
+  },
+
   async removeImage(sessionId, imageId) {
     const key = sessionId + '_' + imageId;
     try {
