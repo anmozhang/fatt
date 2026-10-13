@@ -4,34 +4,6 @@
 
 const InspectionCore = {
   Utils: {
-    // Get URL query parameters as an object
-    getParams() {
-      const params = {};
-      new URLSearchParams(window.location.search).forEach((v, k) => {
-        params[k] = v;
-      });
-      return params;
-    },
-
-    // Format a date string for display
-    formatDate(dateStr, lang) {
-      if (!dateStr) return '';
-      try {
-        const date = new Date(dateStr);
-        if (isNaN(date.getTime())) return dateStr;
-        if (lang === 'zh') {
-          return date.toLocaleDateString('zh-CN', {
-            year: 'numeric', month: '2-digit', day: '2-digit'
-          });
-        }
-        return date.toLocaleDateString('en-US', {
-          year: 'numeric', month: 'short', day: 'numeric'
-        });
-      } catch (e) {
-        return dateStr;
-      }
-    },
-
     // Show a toast notification
     toast(message, type = 'info') {
       // Remove any existing toast

@@ -6,7 +6,6 @@ const LandingPage = {
   init() {
     this._checkStorage();
     this._bindRoleCards();
-    this._loadRecentSessions();
     console.log('[Landing] Initialized');
   },
 
@@ -47,26 +46,6 @@ const LandingPage = {
         }
       });
     });
-  },
-
-  /* ---- Recent Sessions (optional feature) ---- */
-  _loadRecentSessions() {
-    if (typeof StorageAdapter === 'undefined') return;
-    StorageAdapter.listSessions().then(sessions => {
-      if (!sessions || sessions.length === 0) return;
-      // Could render recent sessions badge on role cards
-      const recent = sessions.slice(0, 3);
-      console.log('[Landing] Recent sessions:', recent.length);
-    }).catch(() => {});
-  },
-
-  /* ---- Quick Navigate Helpers ---- */
-  goToRole(role) {
-    const paths = {
-      bteam: 'pages/bteam.html?list=1',
-      customer: 'pages/customer.html'
-    };
-    if (paths[role]) window.location.href = paths[role];
   }
 };
 

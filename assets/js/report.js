@@ -24,8 +24,8 @@ const BOX_WEIGHT = { key: 'carton_weight', zh: '重量', en: 'Weight', grossWeig
 // Weight / test sections (independent, stored in measurements.assembly)
 const TEST_SECTIONS = [
   { key: 'weight_of_product', zh: '产品重量', en: 'Weight of Product', netWeight: true },
-  { key: 'drop_test', zh: '跌落测试', en: 'Drop Test', optional: true },
-  { key: 'drop_test_result', zh: '跌落测试检验结果', en: 'Drop Test Inspection Result', result: true, optional: true }
+  { key: 'drop_test', zh: '跌落测试', en: 'Drop Test' },
+  { key: 'drop_test_result', zh: '跌落测试检验结果', en: 'Drop Test Inspection Result', result: true }
 ];
 const CONSTRUCTION_TITLE = { zh: '结构测试', en: 'Construction Test' };
 const CONSTRUCTION_ITEMS = [
@@ -109,7 +109,6 @@ const Report = {
   },
 
   async init() {
-    const root = document.getElementById('reportRoot');
     const params = new URLSearchParams(window.location.search);
     this.sessionKey = params.get('session');
 
@@ -144,7 +143,6 @@ const Report = {
     document.querySelectorAll('.lang-btn').forEach(btn => {
       btn.addEventListener('click', () => setTimeout(() => this.render(), 0));
     });
-    void root;
   },
 
   // Every photo id attached to a measurement entry (general list + per-dimension lists)
@@ -262,7 +260,7 @@ const Report = {
       }).join('');
     };
     // A section with no photos / measurements / notes prints Not Applicable instead of vanishing.
-    const sectionHtml = (cat, entry, sub) => {
+    const sectionHtml = (cat, entry, isSub) => {
       entry = entry || {};
       const note = (entry.detail || '').trim();
       const empty = !hasContent(cat, entry);
@@ -281,7 +279,7 @@ const Report = {
         extra = '<div class="report-detail report-dims"><b>' + this._txt('结果', 'Result') + ':</b> ' +
           (r ? '<span style="display:inline-block;padding:2px 12px;border-radius:4px;background:' + r[0] + ';color:#ffffff;font-weight:700;">' + r[1] + '</span>' : NA) + '</div>';
       }
-      const titleStyle = sub ? ' style="font-size:13px;text-transform:none;letter-spacing:0;font-weight:600;border-bottom-width:1px;border-bottom-color:#bbbbbb;margin-left:12px;"' : '';
+      const titleStyle = isSub ? ' style="font-size:13px;text-transform:none;letter-spacing:0;font-weight:600;border-bottom-width:1px;border-bottom-color:#bbbbbb;margin-left:12px;"' : '';
       return '<div class="report-section">' +
         '<div class="section-title"' + titleStyle + '>' + e(cat[lang] || cat.en) + '</div>' + extra +
         (note ? '<div class="report-detail">' + e(note).replace(/\n/g, '<br>') + '</div>' : '') +
@@ -306,30 +304,27 @@ const Report = {
     GLOBAL_CATEGORIES.forEach(cat => { globalInner += sectionHtml(cat, assembly[cat.key]); });
     measureHtml += '<h3 class="report-box-title">' + this._txt('装配', 'Assembly') + '</h3>' + globalInner;
 
-    // Weight & tests (only for inspections that have these sections)
+    // Weight & tests: always printed. Drop Test onward are optional to fill in, so
+    // anything left empty (or never opened) prints Not Applicable.
     const customKeys = Array.isArray(d.measurements && d.measurements.constructionCustom)
       ? d.measurements.constructionCustom
       : Object.keys(assembly).filter(k => assembly[k] && assembly[k].custom);
-    const hasTests = TEST_SECTIONS.concat(CONSTRUCTION_ITEMS).some(c => assembly[c.key]) || customKeys.length > 0;
-    if (hasTests) {
-      // Drop Test onward are optional to fill in; when empty they print Not Applicable
-      let testInner = '';
-      TEST_SECTIONS.forEach(cat => { testInner += sectionHtml(cat, assembly[cat.key]); });
-      let constructionInner = '';
-      CONSTRUCTION_ITEMS.forEach(it => {
-        if (!hasContent(it, assembly[it.key])) return;
-        constructionInner += sectionHtml(it, assembly[it.key], true);
-      });
-      customKeys.forEach(k => {
-        const en = assembly[k] || {};
-        if (!hasContent({ key: k }, en)) return;
-        const title = String(en.title || '').trim() || this._txt('未命名项目', 'Untitled');
-        constructionInner += sectionHtml({ key: k, zh: title, en: title }, en, true);
-      });
-      testInner += '<div class="report-section"><div class="section-title">' + e(CONSTRUCTION_TITLE[lang] || CONSTRUCTION_TITLE.en) + '</div>' +
-        (constructionInner ? '' : '<div class="report-detail report-na">' + NA + '</div>') + '</div>' + constructionInner;
-      measureHtml += '<h3 class="report-box-title">' + this._txt('重量与测试', 'Weight & Tests') + '</h3>' + testInner;
-    }
+    let testInner = '';
+    TEST_SECTIONS.forEach(cat => { testInner += sectionHtml(cat, assembly[cat.key]); });
+    let constructionInner = '';
+    CONSTRUCTION_ITEMS.forEach(it => {
+      if (!hasContent(it, assembly[it.key])) return;
+      constructionInner += sectionHtml(it, assembly[it.key], true);
+    });
+    customKeys.forEach(k => {
+      const en = assembly[k] || {};
+      if (!hasContent({ key: k }, en)) return;
+      const title = String(en.title || '').trim() || this._txt('未命名项目', 'Untitled');
+      constructionInner += sectionHtml({ key: k, zh: title, en: title }, en, true);
+    });
+    testInner += '<div class="report-section"><div class="section-title">' + e(CONSTRUCTION_TITLE[lang] || CONSTRUCTION_TITLE.en) + '</div>' +
+      (constructionInner ? '' : '<div class="report-detail report-na">' + NA + '</div>') + '</div>' + constructionInner;
+    measureHtml += '<h3 class="report-box-title">' + this._txt('重量与测试', 'Weight & Tests') + '</h3>' + testInner;
 
     // Photos not attached to any measurement category
     const used = new Set();
