@@ -33,11 +33,11 @@ const CONSTRUCTION_ITEMS = [
   { key: 'static_test', zh: '静态测试', en: 'Static Test' },
   { key: 'moisture_test', zh: '湿度测试', en: 'Moisture Test' }
 ];
-const DIM_FIELD_WEIGHT_LEGACY = { key: 'weight', zh: '重量', en: 'Weight' };
+const DIM_FIELD_WEIGHT_LEGACY = { key: 'weight', zh: '重量 (kg)', en: 'Weight (kg)' };
 const DIM_FIELDS = [
-  { key: 'length', zh: '长', en: 'Length' },
-  { key: 'width', zh: '宽', en: 'Width' },
-  { key: 'height', zh: '高', en: 'Height' }
+  { key: 'length', zh: '长 (mm)', en: 'Length (mm)' },
+  { key: 'width', zh: '宽 (mm)', en: 'Width (mm)' },
+  { key: 'height', zh: '高 (mm)', en: 'Height (mm)' }
 ];
 
 // Supplier is fixed for this deployment; older records saved before the field existed show it too.
@@ -262,11 +262,11 @@ const Report = {
       let extra = '';
       if (cat.netWeight) {
         const nw = String(entry.netWeight || '').trim();
-        extra = '<div class="report-detail report-dims"><b>' + this._txt('净重', 'Net Weight') + ':</b> ' + (nw ? e(nw) : NA) + '</div>';
+        extra = '<div class="report-detail report-dims"><b>' + this._txt('净重 (kg)', 'Net Weight (kg)') + ':</b> ' + (nw ? e(nw) : NA) + '</div>';
       }
       if (cat.grossWeight) {
         const gw = String(entry.grossWeight || '').trim();
-        extra = '<div class="report-detail report-dims"><b>' + this._txt('毛重', 'Gross Weight') + ':</b> ' + (gw ? e(gw) : NA) + '</div>';
+        extra = '<div class="report-detail report-dims"><b>' + this._txt('毛重 (kg)', 'Gross Weight (kg)') + ':</b> ' + (gw ? e(gw) : NA) + '</div>';
       }
       if (cat.result) {
         const r = entry.result === 'pass' ? ['#14b8a6', this._txt('合格 (Pass)', 'Pass')] : entry.result === 'fail' ? ['#e53935', this._txt('不合格 (Fail)', 'Fail')] : null;
