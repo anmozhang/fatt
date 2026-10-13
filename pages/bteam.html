@@ -6,8 +6,8 @@
 <meta name="theme-color" content="#1a1a1a" />
 <title data-i18n="role.bteam.name">Get Start</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E📸%3C/text%3E%3C/svg%3E" />
-<link rel="stylesheet" href="../assets/css/main.css?v=1791859982" />
-<link rel="stylesheet" href="../assets/css/bteam.css?v=1791859982" />
+<link rel="stylesheet" href="../assets/css/main.css?v=1791865304" />
+<link rel="stylesheet" href="../assets/css/bteam.css?v=1791865304" />
 </head>
 <body class="theme-light">
 
@@ -129,8 +129,9 @@
 
 </div>
 
-<script src="../assets/js/i18n.js?v=1791859982"></script>
-<script src="../assets/js/storage/storage-adapter.js?v=1791859982"></script>
+<script src="../assets/js/i18n.js?v=1791865304"></script>
+<script src="../assets/js/storage/storage-adapter.js?v=1791865304"></script>
+<script src="../assets/js/lightbox.js?v=1791865304"></script>
 <script>
 const STEPS = [
   { key: 'setup', i18n: 'bteam.step.setup', label: '基本信息' },
@@ -193,6 +194,11 @@ const BTeam = {
 
   async init() {
     this._renderSteps();
+    // Tap a photo in the upload grid to see it larger
+    document.addEventListener('click', (ev) => {
+      const img = ev.target && ev.target.closest ? ev.target.closest('#photoGrid .photo-item img') : null;
+      if (img && window.Lightbox) Lightbox.openFrom(img, '#photoGrid .photo-item img');
+    });
     // I18n only re-labels [data-i18n] nodes; the "Step n of N" text is built
     // from a template, so refresh it when the language is switched.
     document.querySelectorAll('.lang-btn').forEach(btn => {
@@ -810,7 +816,7 @@ const BTeam = {
 
     let html = `
       <div class="step-title" data-i18n="measure.title">尺寸测量</div>
-      <div class="step-subtitle" data-i18n="measure.subtitle">将照片拖拽到对应分类</div>
+      <div class="step-subtitle" data-i18n="measure.subtitle">将照片拖拽到对应分类；点击照片可放大查看</div>
       <div class="photo-pool">
         <div class="pool-title" data-i18n="measure.uploaded_photos">已上传照片</div>
         <div class="pool-grid" id="photoPool" data-role="pool">
@@ -1064,6 +1070,8 @@ const BTeam = {
     const EDGE_PX = 70;      // size of the hot zone at each edge
     const MAX_SPEED = 18;    // px per frame at the very edge (~1000px/s)
     let lastX = e.clientX, lastY = e.clientY;
+    const startX = e.clientX, startY = e.clientY;
+    let moved = 0;          // farthest the pointer travelled; a tiny movement is a tap, not a drag
     let scrollRaf = null;
 
     const innerScrolls = () => !!stepContent && stepContent.scrollHeight > stepContent.clientHeight + 1;
@@ -1118,6 +1126,7 @@ const BTeam = {
     const onMove = (ev) => {
       lastX = ev.clientX;
       lastY = ev.clientY;
+      moved = Math.max(moved, Math.hypot(lastX - startX, lastY - startY));
       ghost.style.left = (lastX - offsetX) + 'px';
       ghost.style.top = (lastY - offsetY) + 'px';
       updateDropZone();
@@ -1134,6 +1143,13 @@ const BTeam = {
       ghost.remove();
       el.style.opacity = '';
       if (lastZone) lastZone.classList.remove('drag-over');
+
+      // A tap (no real movement) opens the photo larger instead of moving it
+      if (ev.type === 'pointerup' && moved < 8) {
+        const img = el.querySelector('img');
+        if (img && window.Lightbox) Lightbox.openFrom(img, '#stepContent .drag-thumb img');
+        return;
+      }
 
       const target = lastZone;
       if (target) {
