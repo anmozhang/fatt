@@ -276,7 +276,7 @@ const Report = {
         const gw = String(entry.grossWeight || '').trim();
         extra = '<div class="report-detail report-dims"><b>' + this._txt('毛重 (kg)', 'Gross Weight (kg)') + ':</b> ' + (gw ? e(gw) : NA) + '</div>';
       }
-      if (cat.result) {
+      if (cat.result && entry.result) {
         const r = entry.result === 'pass' ? ['#14b8a6', this._txt('合格 (Pass)', 'Pass')] : entry.result === 'fail' ? ['#e53935', this._txt('不合格 (Fail)', 'Fail')] : null;
         extra = '<div class="report-detail report-dims"><b>' + this._txt('结果', 'Result') + ':</b> ' +
           (r ? '<span style="display:inline-block;padding:2px 12px;border-radius:4px;background:' + r[0] + ';color:#ffffff;font-weight:700;">' + r[1] + '</span>' : NA) + '</div>';
@@ -312,12 +312,9 @@ const Report = {
       : Object.keys(assembly).filter(k => assembly[k] && assembly[k].custom);
     const hasTests = TEST_SECTIONS.concat(CONSTRUCTION_ITEMS).some(c => assembly[c.key]) || customKeys.length > 0;
     if (hasTests) {
-      // From Drop Test onward the sections are optional: nothing filled in = not printed
+      // Drop Test onward are optional to fill in; when empty they print Not Applicable
       let testInner = '';
-      TEST_SECTIONS.forEach(cat => {
-        if (cat.optional && !hasContent(cat, assembly[cat.key])) return;
-        testInner += sectionHtml(cat, assembly[cat.key]);
-      });
+      TEST_SECTIONS.forEach(cat => { testInner += sectionHtml(cat, assembly[cat.key]); });
       let constructionInner = '';
       CONSTRUCTION_ITEMS.forEach(it => {
         if (!hasContent(it, assembly[it.key])) return;
@@ -329,9 +326,8 @@ const Report = {
         const title = String(en.title || '').trim() || this._txt('未命名项目', 'Untitled');
         constructionInner += sectionHtml({ key: k, zh: title, en: title }, en, true);
       });
-      if (constructionInner) {
-        testInner += '<div class="report-section"><div class="section-title">' + e(CONSTRUCTION_TITLE[lang] || CONSTRUCTION_TITLE.en) + '</div></div>' + constructionInner;
-      }
+      testInner += '<div class="report-section"><div class="section-title">' + e(CONSTRUCTION_TITLE[lang] || CONSTRUCTION_TITLE.en) + '</div>' +
+        (constructionInner ? '' : '<div class="report-detail report-na">' + NA + '</div>') + '</div>' + constructionInner;
       measureHtml += '<h3 class="report-box-title">' + this._txt('重量与测试', 'Weight & Tests') + '</h3>' + testInner;
     }
 
