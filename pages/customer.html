@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#1a1a1a" />
 <title data-i18n="customer.title">Customer Portal</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E📋%3C/text%3E%3C/svg%3E" />
-<link rel="stylesheet" href="../assets/css/main.css?v=1791873765" />
+<link rel="stylesheet" href="../assets/css/main.css?v=1791878396" />
 <style>
 .cl-tabs{display:flex;gap:0;border-bottom:1px solid #333;margin-bottom:20px;overflow-x:auto;-webkit-overflow-scrolling:touch}
 .cl-tab{flex:1 1 auto;padding:10px 8px;background:none;border:none;border-bottom:2px solid transparent;color:#888;cursor:pointer;font-size:13px;white-space:nowrap}
@@ -23,6 +23,9 @@
 .res-btn.pass.active{background:rgba(102,187,106,0.2);border-color:#66bb6a;color:#66bb6a}
 .res-btn.fail.active{background:rgba(239,83,80,0.2);border-color:#ef5350;color:#ef5350}
 .res-hint{font-size:12px;color:#888;margin-top:12px}
+.cl-side{display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex-shrink:0}
+.cl-del{padding:4px 12px;border-radius:8px;border:1px solid #5a3a3a;background:transparent;color:#ef5350;font-size:12px;cursor:pointer}
+.cl-del:active{background:rgba(239,83,80,0.15)}
 </style>
 </head>
 <body class="theme-light">
@@ -71,9 +74,9 @@
   </div>
 </div>
 
-<script src="../assets/js/i18n.js?v=1791873765"></script>
-<script src="../assets/js/storage/storage-adapter.js?v=1791873765"></script>
-<script src="../assets/js/drive-provider.js?v=1791873765"></script>
+<script src="../assets/js/i18n.js?v=1791878396"></script>
+<script src="../assets/js/storage/storage-adapter.js?v=1791878396"></script>
+<script src="../assets/js/drive-provider.js?v=1791878396"></script>
 <script>
 let currentTab = 'psi';
 let allSessions = [];      // [{key, data, updatedAt}]
@@ -132,19 +135,19 @@ function cardHtml(s, tab) {
     return '<div class="card cl-card" onclick="resumeDraft(\'' + sk + '\')"><div class="cl-card-row"><div>' +
       '<div class="cl-name">' + _esc(name) + '</div>' +
       (edited ? '<div class="cl-meta">' + _esc(tr('customer.updated_on', 'Last edited: {date}', { date: edited })) + '</div>' : '') +
-      '</div><span class="badge badge-warning">' + _esc(tr('common.pending', 'Pending')) + '</span></div></div>';
+      '</div><div class="cl-side"><span class="badge badge-warning">' + _esc(tr('common.pending', 'Pending')) + '</span>' + '<button type="button" class="cl-del" onclick="event.stopPropagation();deleteSession(\'' + sk + '\')">' + _esc(tr('customer.delete', '删除')) + '</button>' + '</div></div></div>';
   }
   const name = code || tr('customer.untitled', '(未填写客户代码)');
   const dateText = tr('customer.submitted_on', 'Submitted: {date}', { date: submittedDate(d) || '-' });
   if (tab === 'feedback') {
     return '<div class="card cl-card" onclick="openResultModal(\'' + sk + '\')"><div class="cl-card-row"><div>' +
       '<div class="cl-name">' + _esc(name) + ' - ' + typeLabel(typeOf(d)) + '</div>' +
-      '<div class="cl-meta">' + _esc(dateText) + '</div></div>' + resultBadge(d) + '</div></div>';
+      '<div class="cl-meta">' + _esc(dateText) + '</div></div><div class="cl-side">' + resultBadge(d) + '<button type="button" class="cl-del" onclick="event.stopPropagation();deleteSession(\'' + sk + '\')">' + _esc(tr('customer.delete', '删除')) + '</button>' + '</div></div></div>';
   }
   // PSI / Sample lists: click opens the report
   return '<div class="card cl-card" onclick="openReport(\'' + sk + '\')"><div class="cl-card-row"><div>' +
     '<div class="cl-name">' + _esc(name) + '</div>' +
-    '<div class="cl-meta">' + _esc(dateText) + '</div></div>' + resultBadge(d) + '</div></div>';
+    '<div class="cl-meta">' + _esc(dateText) + '</div></div><div class="cl-side">' + resultBadge(d) + '<button type="button" class="cl-del" onclick="event.stopPropagation();deleteSession(\'' + sk + '\')">' + _esc(tr('customer.delete', '删除')) + '</button>' + '</div></div></div>';
 }
 
 function render() {
@@ -173,11 +176,24 @@ async function loadReports() {
   // fetch what others saved there, then refresh the list if anything changed.
   if (StorageAdapter.hasProvider()) {
     const r = await StorageAdapter.syncFromProvider();
-    if (r && (r.added || r.updated)) await readSessions();
+    if (r && (r.added || r.updated || r.removed)) await readSessions();
   }
 }
 
 function findSession(key) { return allSessions.find(s => s.key === key); }
+
+// Delete one inspection (record + photos) from this device. With a connected data drive the
+// deletion is shared: other devices remove it too unless it was edited after this moment.
+async function deleteSession(key) {
+  const s = findSession(key);
+  if (!s) return;
+  const name = (customerName(s.data) || tr('customer.untitled', '(未填写客户代码)')) + ' - ' + typeLabel(typeOf(s.data));
+  if (!window.confirm(tr('customer.delete_confirm', '确定删除「{name}」？照片也会一起删除，此操作无法撤销。', { name: name }))) return;
+  try { await StorageAdapter.deleteSession(key.replace(/^session_/, '')); }
+  catch (e) { console.error(e); alert(tr('backup.failed', 'Something went wrong, please try again')); return; }
+  if (activeKey === key) closeResultModal();
+  await readSessions();
+}
 
 // Pending → back into the Get Start wizard. listSessions() keys carry one
 // "session_" layer on top of the sessionId (which itself starts with
