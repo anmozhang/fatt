@@ -17,8 +17,7 @@ const MEASURE_CATEGORIES = [
 // Independent sections (not repeated per box), stored in measurements.assembly
 const GLOBAL_CATEGORIES = [
   { key: 'fully_assembly', zh: '完整装配', en: 'Fully Assembly' },
-  { key: 'dimension_assembly', zh: '装配尺寸', en: 'Dimension Assembly', dims: true },
-  { key: 'assembly_weight', zh: '重量', en: 'Weight', grossWeight: true }
+  { key: 'dimension_assembly', zh: '装配尺寸', en: 'Dimension Assembly', dims: true }
 ];
 // Each box has its own Weight section (Gross Weight + photos + note)
 const BOX_WEIGHT = { key: 'carton_weight', zh: '重量', en: 'Weight', grossWeight: true };
@@ -296,10 +295,7 @@ const Report = {
       measureHtml += '<h3 class="report-box-title">' + this._txt('第 ' + b + ' 箱', 'Box ' + b) + '</h3>' + inner;
     });
     let globalInner = '';
-    GLOBAL_CATEGORIES.forEach(cat => {
-      if (cat.grossWeight && !assembly[cat.key]) return;      // reports from before Weight became its own section
-      globalInner += sectionHtml(cat, assembly[cat.key]);
-    });
+    GLOBAL_CATEGORIES.forEach(cat => { globalInner += sectionHtml(cat, assembly[cat.key]); });
     measureHtml += '<h3 class="report-box-title">' + this._txt('装配', 'Assembly') + '</h3>' + globalInner;
 
     // Weight & tests (only for inspections that have these sections)
