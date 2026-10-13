@@ -9,6 +9,7 @@ const StorageAdapter = {
     try {
       const record = { data, updatedAt: Date.now() };
       localStorage.setItem(this.prefix + key, JSON.stringify(record));
+      if (key.indexOf('session_') === 0) localStorage.removeItem(this._tombKey(key)); // saved after a delete = alive again
       this._mirror('save', key, record);
       return { ok: true };
     } catch (e) {
@@ -26,7 +27,9 @@ const StorageAdapter = {
 
   async remove(key) {
     localStorage.removeItem(this.prefix + key);
-    this._mirror('remove', key);
+    const t = Date.now();
+    if (key.indexOf('session_') === 0) { try { this._setTomb(key, t); } catch (_) {} }
+    this._mirror('remove', key, t);
     return { ok: true };
   },
 
@@ -114,6 +117,68 @@ const StorageAdapter = {
     return localStorage.getItem(this.prefix + 'img_' + key);
   },
 
+  /* ---- Deleting an inspection ----
+     A delete leaves a small "tombstone" (fatt_tombstone_<key> = { deletedAt }) so that
+     other devices can learn about it when they sync. Rule everywhere: whichever happened
+     last wins. An inspection edited after it was deleted comes back; one deleted after
+     its last edit is removed everywhere (record and photos). Needs the devices' clocks
+     to be roughly right. */
+  _tombKey(key) { return this.prefix + 'tombstone_' + key; },
+  _getTomb(key) {
+    try { const r = localStorage.getItem(this._tombKey(key)); return r ? (Number(JSON.parse(r).deletedAt) || 0) : 0; }
+    catch (_) { return 0; }
+  },
+  _setTomb(key, t) { localStorage.setItem(this._tombKey(key), JSON.stringify({ deletedAt: t })); },
+
+  // Removes every photo of one inspection from this browser. Returns the image keys removed.
+  async _purgePhotos(sessionId) {
+    const pre = sessionId + '_';
+    const removed = [];
+    try {
+      const db = await this._openImageDB();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction('images', 'readwrite');
+        const req = tx.objectStore('images').openCursor(IDBKeyRange.bound(pre, pre + '\uffff'));
+        req.onsuccess = () => { const c = req.result; if (c) { removed.push(c.key); c.delete(); c.continue(); } };
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+    } catch (e) { console.warn('[StorageAdapter] could not remove photos:', e); }
+    const legacy = this.prefix + 'img_' + pre;
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && k.indexOf(legacy) === 0) { removed.push(k.slice((this.prefix + 'img_').length)); localStorage.removeItem(k); }
+    }
+    return removed;
+  },
+
+  // { imageKey: dataUrl } for one inspection's photos in this browser
+  async _photosOf(sessionId) {
+    const pre = sessionId + '_', out = {};
+    try {
+      const db = await this._openImageDB();
+      await new Promise((resolve, reject) => {
+        const req = db.transaction('images', 'readonly').objectStore('images').openCursor(IDBKeyRange.bound(pre, pre + '\uffff'));
+        req.onsuccess = () => { const c = req.result; if (c) { if (typeof c.value === 'string') out[c.key] = c.value; c.continue(); } else resolve(); };
+        req.onerror = () => reject(req.error);
+      });
+    } catch (e) { console.warn('[StorageAdapter] could not read photos:', e); }
+    return out;
+  },
+
+  // Delete one inspection (its record and photos) on this device and tell the provider, if any.
+  async deleteSession(sessionId) {
+    const key = 'session_' + sessionId;
+    const t = Date.now();
+    localStorage.removeItem(this.prefix + key);
+    try { this._setTomb(key, t); } catch (e) { console.warn('[StorageAdapter] could not store delete marker:', e); }
+    if (localStorage.getItem(this.prefix + 'current_session') === sessionId) localStorage.removeItem(this.prefix + 'current_session');
+    const images = await this._purgePhotos(sessionId);
+    this._mirror('remove', key, t);
+    images.forEach(k => this._mirror('removeImage', k));
+    return { ok: true, deletedAt: t };
+  },
+
   /* ---- Local backup / restore ----
      Everything lives in this browser, so the user can save all inspections and
      photos to a file on their own device and load it back later (new phone,
@@ -174,21 +239,59 @@ const StorageAdapter = {
 
   // Shared by importBackup and syncFromProvider. b: { local: {fatt_key: string}, images: {key: dataUrl} }
   async _merge(b) {
-    const res = { ok: true, added: 0, updated: 0, kept: 0, images: 0, failed: 0 };
+    const res = { ok: true, added: 0, updated: 0, kept: 0, removed: 0, images: 0, failed: 0 };
     const sessionPrefix = this.prefix + 'session_';
+    const tombPrefix = this.prefix + 'tombstone_';
+    const dead = []; // "<sessionId>_" prefixes of inspections deleted after their last edit: their photos must not come back
+
+    // 1) Deletions first: "whichever happened last wins" against what is stored here
     for (const k of Object.keys(b.local)) {
       const v = b.local[k];
-      if (typeof v !== 'string' || !k.startsWith(this.prefix) || k === this.prefix + 'current_session') continue;
+      if (typeof v !== 'string' || k.indexOf(tombPrefix) !== 0) continue;
+      const key = k.slice(tombPrefix.length);
+      if (key.indexOf('session_') !== 0) continue;
+      try {
+        const d = Number(JSON.parse(v).deletedAt) || 0;
+        if (!d) continue;
+        const existingRaw = localStorage.getItem(this.prefix + key);
+        if (existingRaw !== null) {
+          let u = 0;
+          try { u = Number(JSON.parse(existingRaw).updatedAt) || 0; } catch (_) {}
+          if (d < u) continue; // edited here after it was deleted elsewhere: keep it
+          localStorage.removeItem(this.prefix + key);
+          res.removed++;
+          const sid = key.slice('session_'.length);
+          await this._purgePhotos(sid);
+          if (localStorage.getItem(this.prefix + 'current_session') === sid) localStorage.removeItem(this.prefix + 'current_session');
+          this._setTomb(key, d);
+          dead.push(key.slice('session_'.length) + '_');
+        } else if (d > this._getTomb(key)) {
+          this._setTomb(key, d);
+          dead.push(key.slice('session_'.length) + '_');
+        } else if (d === this._getTomb(key)) {
+          dead.push(key.slice('session_'.length) + '_');
+        }
+      } catch (e) { res.failed++; }
+    }
+
+    // 2) Inspections and other data
+    for (const k of Object.keys(b.local)) {
+      const v = b.local[k];
+      if (typeof v !== 'string' || !k.startsWith(this.prefix) || k === this.prefix + 'current_session' || k.indexOf(tombPrefix) === 0) continue;
       const isSession = k.startsWith(sessionPrefix);
       try {
         if (isSession) {
           const incoming = JSON.parse(v);
           if (!incoming || typeof incoming.data !== 'object' || incoming.data === null) continue;
+          const key = k.slice(this.prefix.length);
+          const inU = Number(incoming.updatedAt) || 0;
+          const tomb = this._getTomb(key);
+          if (tomb && inU <= tomb) { res.kept++; dead.push(key.slice('session_'.length) + '_'); continue; } // deleted after this version
           const existingRaw = localStorage.getItem(k);
-          if (existingRaw === null) { localStorage.setItem(k, v); res.added++; continue; }
+          if (existingRaw === null) { localStorage.setItem(k, v); res.added++; if (tomb) localStorage.removeItem(this._tombKey(key)); continue; }
           let existing = null;
           try { existing = JSON.parse(existingRaw); } catch (_) {}
-          if (!existing || (incoming.updatedAt || 0) > (existing.updatedAt || 0)) { localStorage.setItem(k, v); res.updated++; }
+          if (!existing || inU > (Number(existing.updatedAt) || 0)) { localStorage.setItem(k, v); res.updated++; }
           else res.kept++;
         } else if (localStorage.getItem(k) === null) {
           localStorage.setItem(k, v);
@@ -201,6 +304,7 @@ const StorageAdapter = {
       for (const k of Object.keys(b.images)) {
         const v = b.images[k];
         if (typeof v !== 'string' || v.indexOf('data:image/') !== 0) continue;
+        if (dead.some(pr => k.indexOf(pr) === 0)) continue;
         const exists = await new Promise((resolve) => {
           const r = db.transaction('images', 'readonly').objectStore('images').count(k);
           r.onsuccess = () => resolve(r.result > 0); r.onerror = () => resolve(false);
@@ -243,10 +347,11 @@ const StorageAdapter = {
      Provider shape - every method is optional and may be async:
        name                       label shown on the landing page
        save(key, record)          key 'session_<id>', record { data, updatedAt }
-       remove(key)                a session was deleted
+       remove(key, deletedAt)     a session was deleted at that time (ms). Keep a record of the deletion, not just a missing file
        saveImage(key, dataUrl)    key '<sessionId>_<photoId>'
        removeImage(key)
-       pull()                     returns { sessions: { 'session_<id>': record }, images: { key: dataUrl } }
+       pull()                     returns { sessions: { 'session_<id>': record }, images: { key: dataUrl },
+                                  deleted: { 'session_<id>': deletedAt } }
                                   (or null/undefined when there is nothing)
      The browser copy stays the source of truth: a provider failure never blocks or
      rolls back a local save. Failures are reported to StorageAdapter.onProviderError. */
@@ -274,7 +379,7 @@ const StorageAdapter = {
     const sessionKey = key.indexOf('session_') === 0;
     let call = null;
     if (op === 'save' && sessionKey && typeof p.save === 'function') call = () => p.save(key, value);
-    else if (op === 'remove' && sessionKey && typeof p.remove === 'function') call = () => p.remove(key);
+    else if (op === 'remove' && sessionKey && typeof p.remove === 'function') call = () => p.remove(key, value);
     else if (op === 'saveImage' && typeof p.saveImage === 'function') call = () => p.saveImage(key, value);
     else if (op === 'removeImage' && typeof p.removeImage === 'function') call = () => p.removeImage(key);
     if (!call) return;
@@ -298,8 +403,52 @@ const StorageAdapter = {
       if (k.indexOf('session_') !== 0 || !rec || typeof rec !== 'object') continue;
       local[this.prefix + k] = JSON.stringify({ data: rec.data, updatedAt: rec.updatedAt });
     }
+    const deleted = got.deleted && typeof got.deleted === 'object' ? got.deleted : {};
+    for (const k of Object.keys(deleted)) {
+      if (k.indexOf('session_') !== 0) continue;
+      local[this._tombKey(k)] = JSON.stringify({ deletedAt: Number(deleted[k]) || 0 });
+    }
     const images = got.images && typeof got.images === 'object' ? got.images : {};
-    return this._merge({ local: local, images: images });
+    const res = await this._merge({ local: local, images: images });
+    res.pushed = await this._pushToProvider(sessions, deleted);
+    return res;
+  },
+
+  // Second half of a sync: hand the provider whatever it is missing or has an older version of
+  // (covers changes made while it was unreachable). Photos are sent as they are saved, not here.
+  async _pushToProvider(remoteSessions, remoteDeleted) {
+    const p = this._provider, out = { sessions: 0, deleted: 0 };
+    if (!p) return out;
+    const jobs = [];
+    const tombPrefix = this.prefix + 'tombstone_', sessionPrefix = this.prefix + 'session_';
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k) continue;
+      try {
+        if (k.indexOf(tombPrefix) === 0 && typeof p.remove === 'function') {
+          const key = k.slice(tombPrefix.length);
+          const d = this._getTomb(key);
+          if (d > (Number(remoteDeleted[key]) || 0)) { out.deleted++; jobs.push(() => p.remove(key, d)); }
+        } else if (k.indexOf(sessionPrefix) === 0 && typeof p.save === 'function') {
+          const key = k.slice(this.prefix.length);
+          const rec = JSON.parse(localStorage.getItem(k));
+          const ru = remoteSessions[key] && Number(remoteSessions[key].updatedAt) || 0;
+          if (rec && rec.data && (Number(rec.updatedAt) || 0) > ru) {
+            out.sessions++;
+            jobs.push(async () => {
+              await p.save(key, rec);
+              // a version that comes back after a delete needs its photos on the drive again
+              if (typeof p.saveImage === 'function') {
+                const photos = await this._photosOf(key.slice('session_'.length));
+                for (const ik of Object.keys(photos)) await p.saveImage(ik, photos[ik]);
+              }
+            });
+          }
+        }
+      } catch (_) {}
+    }
+    await Promise.all(jobs.map(j => { try { return Promise.resolve(j()).catch(e => this._providerFailed('push', e)); } catch (e) { this._providerFailed('push', e); return null; } }));
+    return out;
   }
 };
 
