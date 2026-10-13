@@ -5,6 +5,7 @@
 const LandingPage = {
   init() {
     this._checkStorage();
+    this._syncProvider();
     this._bindRoleCards();
     this._bindBackup();
     console.log('[Landing] Initialized');
@@ -24,6 +25,17 @@ const LandingPage = {
       if (dot) { dot.style.background = '#ef5350'; }
       console.warn('[Landing] Storage unavailable:', e);
     }
+  },
+
+  /* ---- Optional customer data drive (only active when drive-provider.js registers one) ---- */
+  async _syncProvider() {
+    if (typeof StorageAdapter === 'undefined' || !StorageAdapter.hasProvider()) return;
+    const info = document.getElementById('storageInfo');
+    const name = StorageAdapter.providerName();
+    const label = (ok) => { if (info) info.textContent = 'LocalStorage ✓ + ' + (name || 'Drive') + (ok ? ' ✓' : ' ✗'); };
+    label(true);
+    const r = await StorageAdapter.syncFromProvider();
+    label(!!(r && r.ok));
   },
 
   /* ---- Backup / restore (local file only) ---- */
