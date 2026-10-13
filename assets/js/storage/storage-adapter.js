@@ -7,8 +7,9 @@ const StorageAdapter = {
 
   async save(key, data) {
     try {
-      const serialized = JSON.stringify({ data, updatedAt: Date.now() });
-      localStorage.setItem(this.prefix + key, serialized);
+      const record = { data, updatedAt: Date.now() };
+      localStorage.setItem(this.prefix + key, JSON.stringify(record));
+      this._mirror('save', key, record);
       return { ok: true };
     } catch (e) {
       console.error('[StorageAdapter] save error:', e);
@@ -23,7 +24,11 @@ const StorageAdapter = {
     } catch (e) { console.error('[StorageAdapter] load error:', e); return null; }
   },
 
-  async remove(key) { localStorage.removeItem(this.prefix + key); return { ok: true }; },
+  async remove(key) {
+    localStorage.removeItem(this.prefix + key);
+    this._mirror('remove', key);
+    return { ok: true };
+  },
 
   async list(prefix) {
     const results = [];
@@ -81,10 +86,11 @@ const StorageAdapter = {
         tx.oncomplete = resolve;
         tx.onerror = () => reject(tx.error);
       });
+      this._mirror('saveImage', key, dataUrl);
       return true;
     } catch (e) {
       console.warn('[StorageAdapter] IndexedDB saveImage failed, falling back to localStorage:', e);
-      try { localStorage.setItem(this.prefix + 'img_' + key, dataUrl); return true; }
+      try { localStorage.setItem(this.prefix + 'img_' + key, dataUrl); this._mirror('saveImage', key, dataUrl); return true; }
       catch (e2) { console.warn('[StorageAdapter] localStorage fallback also failed:', e2); return false; }
     }
   },
@@ -163,6 +169,11 @@ const StorageAdapter = {
         typeof b.local !== 'object' || b.local === null || typeof b.images !== 'object' || b.images === null) {
       return { ok: false, error: 'invalid' };
     }
+    return this._merge(b);
+  },
+
+  // Shared by importBackup and syncFromProvider. b: { local: {fatt_key: string}, images: {key: dataUrl} }
+  async _merge(b) {
     const res = { ok: true, added: 0, updated: 0, kept: 0, images: 0, failed: 0 };
     const sessionPrefix = this.prefix + 'session_';
     for (const k of Object.keys(b.local)) {
@@ -220,6 +231,75 @@ const StorageAdapter = {
       console.warn('[StorageAdapter] IndexedDB removeImage failed:', e);
     }
     localStorage.removeItem(this.prefix + 'img_' + key); // clean up any legacy copy too
+    this._mirror('removeImage', key);
+  },
+
+  /* ---- Optional data-drive provider (a hook; does nothing unless one is registered) ----
+     This file contains no addresses, keys or network code. A customer who wants to
+     share data through their own drive supplies a small script (see assets/js/drive-provider.js)
+     that calls StorageAdapter.registerProvider({...}). Without a provider everything behaves
+     exactly as before: data lives in this browser only.
+
+     Provider shape - every method is optional and may be async:
+       name                       label shown on the landing page
+       save(key, record)          key 'session_<id>', record { data, updatedAt }
+       remove(key)                a session was deleted
+       saveImage(key, dataUrl)    key '<sessionId>_<photoId>'
+       removeImage(key)
+       pull()                     returns { sessions: { 'session_<id>': record }, images: { key: dataUrl } }
+                                  (or null/undefined when there is nothing)
+     The browser copy stays the source of truth: a provider failure never blocks or
+     rolls back a local save. Failures are reported to StorageAdapter.onProviderError. */
+  _provider: null,
+  onProviderError: null,
+
+  registerProvider(p) {
+    if (!p || typeof p !== 'object') return false;
+    this._provider = p;
+    return true;
+  },
+  unregisterProvider() { this._provider = null; },
+  hasProvider() { return !!this._provider; },
+  providerName() { return this._provider ? String(this._provider.name || '') : ''; },
+
+  _providerFailed(op, e) {
+    console.warn('[StorageAdapter] provider.' + op + ' failed:', e);
+    try { if (typeof this.onProviderError === 'function') this.onProviderError(op, e); } catch (_) {}
+  },
+
+  // Fire-and-forget copy of a local change to the provider. Never throws, never awaited by callers.
+  _mirror(op, key, value) {
+    const p = this._provider;
+    if (!p) return;
+    const sessionKey = key.indexOf('session_') === 0;
+    let call = null;
+    if (op === 'save' && sessionKey && typeof p.save === 'function') call = () => p.save(key, value);
+    else if (op === 'remove' && sessionKey && typeof p.remove === 'function') call = () => p.remove(key);
+    else if (op === 'saveImage' && typeof p.saveImage === 'function') call = () => p.saveImage(key, value);
+    else if (op === 'removeImage' && typeof p.removeImage === 'function') call = () => p.removeImage(key);
+    if (!call) return;
+    try { Promise.resolve(call()).catch(e => this._providerFailed(op, e)); }
+    catch (e) { this._providerFailed(op, e); }
+  },
+
+  // Bring data from the provider into this browser, using the same merge rules as importBackup
+  // (adds or updates, never deletes; newer inspection wins). Returns the merge result, or
+  // { ok: true, skipped: true } when there is no provider or nothing to pull.
+  async syncFromProvider() {
+    const p = this._provider;
+    if (!p || typeof p.pull !== 'function') return { ok: true, skipped: true };
+    let got;
+    try { got = await p.pull(); } catch (e) { this._providerFailed('pull', e); return { ok: false, error: 'provider' }; }
+    if (!got || typeof got !== 'object') return { ok: true, skipped: true };
+    const local = {};
+    const sessions = got.sessions && typeof got.sessions === 'object' ? got.sessions : {};
+    for (const k of Object.keys(sessions)) {
+      const rec = sessions[k];
+      if (k.indexOf('session_') !== 0 || !rec || typeof rec !== 'object') continue;
+      local[this.prefix + k] = JSON.stringify({ data: rec.data, updatedAt: rec.updatedAt });
+    }
+    const images = got.images && typeof got.images === 'object' ? got.images : {};
+    return this._merge({ local: local, images: images });
   }
 };
 
