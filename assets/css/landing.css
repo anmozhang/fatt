@@ -150,3 +150,12 @@
 @media (max-width: 400px) {
 .role-grid { grid-template-columns: 1fr; }
 }
+
+/* Backup / restore */
+.backup-panel { width: calc(100% - 32px); max-width: 520px; margin: 28px auto 0; padding: 16px 18px; border: 1px solid #3a3a3a; border-radius: 12px; background: #242424; text-align: center; }
+.backup-title { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+.backup-hint { font-size: 12px; color: #aaa; line-height: 1.6; margin-bottom: 12px; }
+.backup-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.backup-msg { min-height: 18px; margin-top: 10px; font-size: 12px; color: #66bb6a; }
+.backup-msg.error { color: #ef5350; }
+

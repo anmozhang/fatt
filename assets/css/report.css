@@ -169,3 +169,6 @@ body {
 .topbar-back:hover { color: var(--text-primary); }
 .topbar-title { font-size: 15px; font-weight: 700; }
 .topbar-subtitle { font-size: 12px; color: var(--text-secondary); }
+
+/* On-screen report only: photos open larger on tap (the PDF copy has no id) */
+#reportRoot .report-photo img { cursor: zoom-in; }
