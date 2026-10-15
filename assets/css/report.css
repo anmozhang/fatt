@@ -2,7 +2,7 @@
    INSPECTION REPORT - Modway/Qarma Style
    ============================================ */
 .report-page {
-  /* The report is a white paper document (screen, and the exported PDF), so it
+  /* The report is a white paper document (on screen), so it
      carries its own light palette instead of inheriting the app's dark theme. */
   --text-primary: #111827;
   --text-secondary: #4b5563;
@@ -16,8 +16,7 @@
   background: white;
   color: var(--text-primary);
 }
-/* Spacing scale for the on-screen preview only. The PDF copy drops the id, so its
-   layout (tuned for pagination) is unchanged. */
+/* Spacing scale for the on-screen preview. */
 #reportRoot {
   --space-2: 8px;
   --space-3: 12px;
@@ -170,5 +169,5 @@ body {
 .topbar-title { font-size: 15px; font-weight: 700; }
 .topbar-subtitle { font-size: 12px; color: var(--text-secondary); }
 
-/* On-screen report only: photos open larger on tap (the PDF copy has no id) */
+/* Photos open larger on tap */
 #reportRoot .report-photo img { cursor: zoom-in; }
