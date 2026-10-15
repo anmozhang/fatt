@@ -18,7 +18,7 @@ zh: {
 'role.bteam.desc': '现场拍照 · 上传照片 · 记录数据',
 
 'role.customer.name': 'Customer List',
-'role.customer.desc': '查看报告 · 下载PDF · 评论反馈',
+'role.customer.desc': '查看报告 · 下载Excel · 评论反馈',
 'common.back': '返回', 'common.next': '下一步', 'common.previous': '上一步',
 
 'common.loading': '加载中...',
@@ -64,12 +64,12 @@ zh: {
 
 'report.title': '检验报告',
 
-'report.download_pdf': '下载 PDF',
+'report.download_xlsx': '下载 Excel',
 
 'customer.title': '客户列表', 'customer.subtitle': '查看报告 · 判定 Pass / Fail',
 'customer.feedback': '反馈', 'customer.tab.psi': 'PSI - Production', 'customer.tab.sample': 'Sample', 'customer.tab.pending': '待完成',
 'customer.submitted_on': '提交日期：{date}', 'customer.updated_on': '最后修改：{date}', 'customer.untitled': '(未填写客户代码)',
-'customer.result_unset': '未判定', 'customer.result_hint': '选择 Pass / Fail 后才能下载 PDF', 'customer.close': '关闭', 'customer.view_report': '查看报告',
+'customer.result_unset': '未判定', 'customer.result_hint': '选择 Pass / Fail 后才能下载 Excel', 'customer.close': '关闭', 'customer.view_report': '查看报告',
 
 
 'msg.no_data': '暂无数据',
@@ -88,7 +88,7 @@ en: {
 'backup.invalid': 'This is not a valid backup file', 'backup.failed': 'Something went wrong, please try again',
 'role.bteam.name': 'Get Start', 'role.bteam.desc': 'On-site photos · Upload · Data entry',
 
-'role.customer.name': 'Customer List', 'role.customer.desc': 'View reports · Download PDF · Feedback',
+'role.customer.name': 'Customer List', 'role.customer.desc': 'View reports · Download Excel · Feedback',
 'common.back': 'Back', 'common.next': 'Next', 'common.previous': 'Previous',
 
 'common.loading': 'Loading...',
@@ -134,12 +134,12 @@ en: {
 
 'report.title': 'Inspection Report',
 
-'report.download_pdf': 'Download PDF',
+'report.download_xlsx': 'Download Excel',
 
 'customer.title': 'Customer List', 'customer.subtitle': 'View reports · Mark Pass / Fail',
 'customer.feedback': 'Feedback', 'customer.tab.psi': 'PSI - Production', 'customer.tab.sample': 'Sample', 'customer.tab.pending': 'Pending',
 'customer.submitted_on': 'Submitted: {date}', 'customer.updated_on': 'Last edited: {date}', 'customer.untitled': '(No customer code)',
-'customer.result_unset': 'Not set', 'customer.result_hint': 'Choose Pass / Fail before downloading the PDF', 'customer.close': 'Close', 'customer.view_report': 'View Report',
+'customer.result_unset': 'Not set', 'customer.result_hint': 'Choose Pass / Fail before downloading the Excel file', 'customer.close': 'Close', 'customer.view_report': 'View Report',
 
 'msg.no_data': 'No data',
 

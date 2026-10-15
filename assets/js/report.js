@@ -1,8 +1,9 @@
 /* ============================================
-   REPORT.JS - Inspection report view + PDF download
+   REPORT.JS - Inspection report view + Excel download
    Loads a submitted inspection (?session=<key>) from StorageAdapter,
-   renders it as a printable report, and exports it to PDF in the browser
-   (html2pdf.js). No network requests are made for the data itself.
+   renders it as a report preview, and exports it to an .xlsx file in the
+   browser (ExcelJS, bundled in assets/vendor). Photos are embedded in the
+   sheet. No network requests are made.
    ============================================ */
 
 // Per-box categories
@@ -83,9 +84,9 @@ const Report = {
     return r === 'pass' ? 'Pass' : r === 'fail' ? 'Fail' : '';
   },
 
-  // The PDF can only be exported once a result has been chosen.
-  _updatePdfState() {
-    const btn = document.getElementById('downloadPdfBtn');
+  // The Excel file can only be exported once a result has been chosen.
+  _updateExportState() {
+    const btn = document.getElementById('downloadXlsxBtn');
     const ok = !!this._result();
     if (btn) {
       btn.disabled = !ok || this._busy;
@@ -101,8 +102,8 @@ const Report = {
         const root = document.getElementById('reportRoot');
         root.parentNode.insertBefore(note, root);
       }
-      note.textContent = this._txt('请先在 客户列表 → Feedback 中选择 Pass / Fail，才能下载 PDF。',
-        'Choose Pass / Fail under Customer List → Feedback before downloading the PDF.');
+      note.textContent = this._txt('请先在 客户列表 → Feedback 中选择 Pass / Fail，才能下载 Excel。',
+        'Choose Pass / Fail under Customer List → Feedback before downloading the Excel file.');
     } else if (note) {
       note.remove();
     }
@@ -128,7 +129,7 @@ const Report = {
     }
     this.data = data;
 
-    // Resolve every photo to a data URL up front so render() and the PDF export
+    // Resolve every photo to a data URL up front so render() and the Excel export
     // are synchronous and don't depend on timing.
     const originalId = this.sessionKey.replace(/^session_/, '');
     const ids = this._allPhotoIds(data);
@@ -139,7 +140,7 @@ const Report = {
 
     this.render();
 
-    // Tap a photo in the on-screen report to see it larger (the PDF copy is unaffected)
+    // Tap a photo in the on-screen report to see it larger
     document.getElementById('reportRoot').addEventListener('click', (ev) => {
       const img = ev.target && ev.target.closest ? ev.target.closest('.report-photo img') : null;
       if (img && window.Lightbox) Lightbox.openFrom(img, '#reportRoot .report-photo img');
@@ -174,7 +175,7 @@ const Report = {
   _showMessage(msg) {
     const root = document.getElementById('reportRoot');
     root.innerHTML = '<div class="loading-screen"><p>' + this._esc(msg) + '</p></div>';
-    const btn = document.getElementById('downloadPdfBtn');
+    const btn = document.getElementById('downloadXlsxBtn');
     if (btn) btn.disabled = true;
   },
 
@@ -189,41 +190,29 @@ const Report = {
     return html ? '<div class="report-photo-grid">' + html + '</div>' : '';
   },
 
-  render() {
+
+  /* ---- Report content as plain data ----
+     The on-screen preview (render) and the Excel export both read this, so they always
+     show the same thing. Empty values print as Not Applicable. */
+  _model() {
     const d = this.data;
-    if (!d) return;
     const lang = this._lang();
-    const e = v => this._esc(v);
-    // Empty values print as Not Applicable
     const NA = 'Not Applicable';
-    const dash = v => (v == null || String(v).trim() === '' || v === '-' ? NA : e(v));
+    const plain = v => (v == null || String(v).trim() === '' || v === '-' ? NA : String(v));
     const typeKey = d.type ? 'form.type.' + d.type : null;
     const typeText = typeKey && window.t ? t(typeKey) : (d.type || '-');
     const date = d.inspectionDate ? this._dmy(d.inspectionDate) : '';
 
-    const resultLabel = this._resultLabel();
-    // Overall Result sits right under Supplier: teal highlight for Pass, red for Fail
-    const resultBg = this._result() === 'pass' ? '#14b8a6' : '#e53935';
-    const overallRow = resultLabel
-      ? '<tr><td colspan="4" style="background:' + resultBg + ';color:#ffffff;font-weight:700;font-size:15px;padding:10px 12px;border:none;width:auto;">' +
-        this._txt('总体结果', 'Overall Result') + ' : ' + resultLabel + '</td></tr>'
-      : '';
-
-    const sub = document.getElementById('reportSubtitle');
-    if (sub) sub.textContent = d.customer || '';
-
     const info = [
-      [this._txt('客户代码', 'Customer Code'), dash(d.customer), this._txt('检验日期', 'Inspection Date'), dash(date)],
-      [this._txt('PI 号', 'PI No.'), dash(d.pi), this._txt('批次', 'Batch'), dash(d.batch)],
-      [this._txt('型号', 'Model'), dash(d.model), this._txt('版本', 'Version'), dash(d.version)],
-      [this._txt('颜色', 'Color'), dash(d.color), this._txt('检验类型', 'Inspection Type'), dash(typeText)],
-      [this._txt('箱数', 'Box Count'), dash(d.boxCount), this._txt('提交时间', 'Submitted'), dash(d.submittedAt ? this._dmyTime(d.submittedAt) : this._dmy(d.timestamp))],
-      [this._txt('检验人', 'Inspection By'), dash(d.inspectionBy), this._txt('PO 号 / 订单号', 'PO No / Order No'), dash(d.poNo)],
-      [this._txt('总数量', 'Total Quantity'), dash(d.totalQuantity), this._txt('抽样数量', 'Sample Size'), dash(d.sampleSize)]
-    ].map(r => '<tr><td>' + r[0] + '</td><td>' + r[1] + '</td><td>' + r[2] + '</td><td>' + r[3] + '</td></tr>').join('') +
-      '<tr><td>' + this._txt('供应商', 'Supplier') + '</td><td colspan="3">' + e(d.supplier || SUPPLIER_NAME) + '</td></tr>' + overallRow;
+      [this._txt('客户代码', 'Customer Code'), plain(d.customer), this._txt('检验日期', 'Inspection Date'), plain(date)],
+      [this._txt('PI 号', 'PI No.'), plain(d.pi), this._txt('批次', 'Batch'), plain(d.batch)],
+      [this._txt('型号', 'Model'), plain(d.model), this._txt('版本', 'Version'), plain(d.version)],
+      [this._txt('颜色', 'Color'), plain(d.color), this._txt('检验类型', 'Inspection Type'), plain(typeText)],
+      [this._txt('箱数', 'Box Count'), plain(d.boxCount), this._txt('提交时间', 'Submitted'), plain(d.submittedAt ? this._dmyTime(d.submittedAt) : this._dmy(d.timestamp))],
+      [this._txt('检验人', 'Inspection By'), plain(d.inspectionBy), this._txt('PO 号 / 订单号', 'PO No / Order No'), plain(d.poNo)],
+      [this._txt('总数量', 'Total Quantity'), plain(d.totalQuantity), this._txt('抽样数量', 'Sample Size'), plain(d.sampleSize)]
+    ];
 
-    // Measurements: per-box categories first, then the independent sections.
     const boxes = (d.measurements && d.measurements.boxes) || {};
     const assembly = (d.measurements && d.measurements.assembly) || {};
     // Every box listed in the inspection is shown, even if nothing was filled in.
@@ -231,9 +220,10 @@ const Report = {
     for (let i = 1; i <= (parseInt(d.boxCount, 10) || 0); i++) boxSet.add(i);
     const boxNums = Array.from(boxSet).sort((x, y) => x - y);
 
+    const visible = id => !!this.imageMap[id];
     const hasContent = (cat, entry) => {
       if (!entry) return false;
-      if (this._entryPhotoIds(entry).some(id => this.imageMap[id])) return true;
+      if (this._entryPhotoIds(entry).some(visible)) return true;
       if ((entry.detail || '').trim()) return true;
       if (cat.netWeight && String(entry.netWeight || '').trim()) return true;
       if (cat.grossWeight && String(entry.grossWeight || '').trim()) return true;
@@ -241,273 +231,379 @@ const Report = {
       const dims = entry.dims || {};
       return !!cat.dims && DIM_FIELDS.concat([DIM_FIELD_WEIGHT_LEGACY]).some(f => String(dims[f.key] == null ? '' : dims[f.key]).trim() !== '');
     };
+
+    // Section items: kv (label + value or badge), inlinekv (several values on one line),
+    // note, photos, na
+    const photos = ids => { const list = (ids || []).filter(visible); return list.length ? [{ t: 'photos', ids: list }] : []; };
+    const kv = (label, value, badge) => ({ t: 'kv', label: label, value: value ? String(value) : null, badge: badge || null });
+    const naItem = text => ({ t: 'na', text: text });
+    const photosNA = () => naItem(this._txt('照片：', 'Photos: ') + NA);
+    const trimmed = v => String(v == null ? '' : v).trim();
+
     // Dimension sections: every field prints its value with its own photos underneath.
     // Reports submitted before per-field photos existed keep the old inline layout.
-    const dimsHtml = entry => {
+    const dimsItems = entry => {
       const dims = entry.dims || {};
       // Reports saved when Weight was still a dimension field keep printing it
-      const legacyW = DIM_FIELD_WEIGHT_LEGACY;
-      const hasLegacyW = String(dims.weight == null ? '' : dims.weight).trim() !== '' ||
-        ((entry.dimPhotos && entry.dimPhotos.weight) || []).some(id => this.imageMap[id]);
-      const fields = hasLegacyW ? DIM_FIELDS.concat([legacyW]) : DIM_FIELDS;
-      const val = f => { const v = String(dims[f.key] == null ? '' : dims[f.key]).trim(); return v ? e(v) : NA; };
+      const hasLegacyW = trimmed(dims.weight) !== '' || ((entry.dimPhotos && entry.dimPhotos.weight) || []).some(visible);
+      const fields = hasLegacyW ? DIM_FIELDS.concat([DIM_FIELD_WEIGHT_LEGACY]) : DIM_FIELDS;
       if (!entry.dimPhotos) {
-        const cells = fields.map(f => '<span class="report-dim"><b>' + e(f[lang] || f.en) + ':</b> ' + val(f) + '</span>');
-        const anyPhoto = (entry.photoIds || []).some(id => this.imageMap[id]);
-        return '<div class="report-detail report-dims">' + cells.join(' &nbsp; ') + '</div>' +
-          this._photoGrid(entry.photoIds) +
-          (anyPhoto ? '' : '<div class="report-detail report-na">' + this._txt('照片：', 'Photos: ') + NA + '</div>');
+        const out = [{ t: 'inlinekv', cells: fields.map(f => ({ label: f[lang] || f.en, value: trimmed(dims[f.key]) || null })) }];
+        out.push(...photos(entry.photoIds));
+        if (!(entry.photoIds || []).some(visible)) out.push(photosNA());
+        return out;
       }
-      return fields.map(f => {
+      const out = [];
+      fields.forEach(f => {
         const ids = entry.dimPhotos[f.key] || [];
-        const has = ids.some(id => this.imageMap[id]);
-        return '<div class="report-detail report-dims"><b>' + e(f[lang] || f.en) + ':</b> ' + val(f) + '</div>' +
-          (has ? this._photoGrid(ids) : '<div class="report-detail report-na">' + this._txt('照片：', 'Photos: ') + NA + '</div>');
-      }).join('');
+        out.push(kv(f[lang] || f.en, trimmed(dims[f.key])));
+        if (ids.some(visible)) out.push(...photos(ids)); else out.push(photosNA());
+      });
+      return out;
     };
+
     // A section with no photos / measurements / notes prints Not Applicable instead of vanishing.
-    const sectionHtml = (cat, entry, isSub) => {
+    const section = (cat, entry, isSub) => {
       entry = entry || {};
       const note = (entry.detail || '').trim();
       const empty = !hasContent(cat, entry);
-      // Net weight / pass-fail result print right under the title
-      let extra = '';
-      if (cat.netWeight) {
-        const nw = String(entry.netWeight || '').trim();
-        extra = '<div class="report-detail report-dims"><b>' + this._txt('净重 (kg)', 'Net Weight (kg)') + ':</b> ' + (nw ? e(nw) : NA) + '</div>';
-      }
-      if (cat.grossWeight) {
-        const gw = String(entry.grossWeight || '').trim();
-        extra = '<div class="report-detail report-dims"><b>' + this._txt('毛重 (kg)', 'Gross Weight (kg)') + ':</b> ' + (gw ? e(gw) : NA) + '</div>';
-      }
+      const items = [];
+      // Net weight / gross weight / pass-fail result print right under the title
+      if (cat.netWeight) items.push(kv(this._txt('净重 (kg)', 'Net Weight (kg)'), trimmed(entry.netWeight)));
+      if (cat.grossWeight) items.push(kv(this._txt('毛重 (kg)', 'Gross Weight (kg)'), trimmed(entry.grossWeight)));
       if (cat.result && entry.result) {
-        const r = entry.result === 'pass' ? ['#14b8a6', this._txt('合格 (Pass)', 'Pass')] : entry.result === 'fail' ? ['#e53935', this._txt('不合格 (Fail)', 'Fail')] : null;
-        extra = '<div class="report-detail report-dims"><b>' + this._txt('结果', 'Result') + ':</b> ' +
-          (r ? '<span style="display:inline-block;padding:2px 12px;border-radius:4px;background:' + r[0] + ';color:#ffffff;font-weight:700;">' + r[1] + '</span>' : NA) + '</div>';
+        const r = entry.result === 'pass' ? { color: '#14b8a6', text: this._txt('合格 (Pass)', 'Pass') }
+          : entry.result === 'fail' ? { color: '#e53935', text: this._txt('不合格 (Fail)', 'Fail') } : null;
+        items.push(kv(this._txt('结果', 'Result'), null, r));
       }
-      const titleStyle = isSub ? ' style="font-size:13px;text-transform:none;letter-spacing:0;font-weight:600;border-bottom-width:1px;border-bottom-color:#bbbbbb;margin-left:12px;"' : '';
-      return '<div class="report-section">' +
-        '<div class="section-title"' + titleStyle + '>' + e(cat[lang] || cat.en) + '</div>' + extra +
-        (note ? '<div class="report-detail">' + e(note).replace(/\n/g, '<br>') + '</div>' : '') +
-        (cat.dims ? dimsHtml(entry) : this._photoGrid(entry.photoIds)) +
-        (!cat.dims && empty && !cat.netWeight && !cat.grossWeight ? '<div class="report-detail report-na">' + NA + '</div>' : '') +
-        '</div>';
+      if (note) items.push({ t: 'note', text: note });
+      if (cat.dims) items.push(...dimsItems(entry)); else items.push(...photos(entry.photoIds));
+      if (!cat.dims && empty && !cat.netWeight && !cat.grossWeight) items.push(naItem(NA));
+      return { kind: 'section', title: cat[lang] || cat.en, sub: !!isSub, items: items };
     };
+    const heading = text => ({ kind: 'heading', text: text });
 
-    let measureHtml = '';
+    const blocks = [{ kind: 'section', title: this._txt('尺寸测量', 'Measurements'), sub: false, items: [] }];
     boxNums.forEach(b => {
-      let inner = '';
-      MEASURE_CATEGORIES.forEach(cat => { inner += sectionHtml(cat, (boxes[b] || {})[cat.key]); });
-      if ((boxes[b] || {})[BOX_WEIGHT.key]) inner += sectionHtml(BOX_WEIGHT, boxes[b][BOX_WEIGHT.key]);
+      blocks.push(heading(this._txt('第 ' + b + ' 箱', 'Box ' + b)));
+      MEASURE_CATEGORIES.forEach(cat => blocks.push(section(cat, (boxes[b] || {})[cat.key])));
+      if ((boxes[b] || {})[BOX_WEIGHT.key]) blocks.push(section(BOX_WEIGHT, boxes[b][BOX_WEIGHT.key]));
       // Reports saved before these became independent sections kept them per box
       GLOBAL_CATEGORIES.forEach(cat => {
         const old = (boxes[b] || {})[cat.key];
-        if (!assembly[cat.key] && hasContent(cat, old)) inner += sectionHtml(cat, old);
+        if (!assembly[cat.key] && hasContent(cat, old)) blocks.push(section(cat, old));
       });
-      measureHtml += '<h3 class="report-box-title">' + this._txt('第 ' + b + ' 箱', 'Box ' + b) + '</h3>' + inner;
     });
-    let globalInner = '';
-    GLOBAL_CATEGORIES.forEach(cat => { globalInner += sectionHtml(cat, assembly[cat.key]); });
-    measureHtml += '<h3 class="report-box-title">' + this._txt('装配', 'Assembly') + '</h3>' + globalInner;
+    blocks.push(heading(this._txt('装配', 'Assembly')));
+    GLOBAL_CATEGORIES.forEach(cat => blocks.push(section(cat, assembly[cat.key])));
 
     // Weight & tests: always printed. Drop Test onward are optional to fill in, so
     // anything left empty (or never opened) prints Not Applicable.
     const customKeys = Array.isArray(d.measurements && d.measurements.constructionCustom)
       ? d.measurements.constructionCustom
       : Object.keys(assembly).filter(k => assembly[k] && assembly[k].custom);
-    let testInner = '';
-    TEST_SECTIONS.forEach(cat => { testInner += sectionHtml(cat, assembly[cat.key]); });
-    let constructionInner = '';
+    blocks.push(heading(this._txt('重量与测试', 'Weight & Tests')));
+    TEST_SECTIONS.forEach(cat => blocks.push(section(cat, assembly[cat.key])));
+    const construction = [];
     CONSTRUCTION_ITEMS.forEach(it => {
-      if (!hasContent(it, assembly[it.key])) return;
-      constructionInner += sectionHtml(it, assembly[it.key], true);
+      if (hasContent(it, assembly[it.key])) construction.push(section(it, assembly[it.key], true));
     });
     customKeys.forEach(k => {
       const en = assembly[k] || {};
       if (!hasContent({ key: k }, en)) return;
       const title = String(en.title || '').trim() || this._txt('未命名项目', 'Untitled');
-      constructionInner += sectionHtml({ key: k, zh: title, en: title }, en, true);
+      construction.push(section({ key: k, zh: title, en: title }, en, true));
     });
-    testInner += '<div class="report-section"><div class="section-title">' + e(CONSTRUCTION_TITLE[lang] || CONSTRUCTION_TITLE.en) + '</div>' +
-      (constructionInner ? '' : '<div class="report-detail report-na">' + NA + '</div>') + '</div>' + constructionInner;
-    measureHtml += '<h3 class="report-box-title">' + this._txt('重量与测试', 'Weight & Tests') + '</h3>' + testInner;
+    blocks.push({ kind: 'section', title: CONSTRUCTION_TITLE[lang] || CONSTRUCTION_TITLE.en, sub: false, items: construction.length ? [] : [naItem(NA)] });
+    construction.forEach(x => blocks.push(x));
 
     // Photos not attached to any measurement category
     const used = new Set();
-    boxNums.forEach(b => Object.keys(boxes[b] || {}).forEach(c => {
-      this._entryPhotoIds(boxes[b][c]).forEach(id => used.add(id));
-    }));
+    boxNums.forEach(b => Object.keys(boxes[b] || {}).forEach(c => this._entryPhotoIds(boxes[b][c]).forEach(id => used.add(id))));
     Object.keys(assembly).forEach(c => this._entryPhotoIds(assembly[c]).forEach(id => used.add(id)));
-    const loose = (d.photos || []).filter(id => !used.has(id));
-    const looseHtml = this._photoGrid(loose)
-      ? '<div class="report-section"><div class="section-title">' + this._txt('现场照片', 'Site Photos') + '</div>' +
-        this._photoGrid(loose) + '</div>'
-      : '';
+    const loose = photos((d.photos || []).filter(id => !used.has(id)));
+    if (loose.length) blocks.push({ kind: 'section', title: this._txt('现场照片', 'Site Photos'), sub: false, items: loose });
 
-    const root = document.getElementById('reportRoot');
-    root.innerHTML =
+    return {
+      customer: plain(d.customer),
+      info: info,
+      supplier: d.supplier || SUPPLIER_NAME,
+      result: this._result() ? { label: this._resultLabel(), pass: this._result() === 'pass' } : null,
+      blocks: blocks
+    };
+  },
+
+  _itemHtml(it) {
+    const e = v => this._esc(v);
+    const NA = 'Not Applicable';
+    if (it.t === 'kv') {
+      const val = it.badge
+        ? '<span style="display:inline-block;padding:2px 12px;border-radius:4px;background:' + it.badge.color + ';color:#ffffff;font-weight:700;">' + e(it.badge.text) + '</span>'
+        : (it.value ? e(it.value) : NA);
+      return '<div class="report-detail report-dims"><b>' + e(it.label) + ':</b> ' + val + '</div>';
+    }
+    if (it.t === 'inlinekv') {
+      return '<div class="report-detail report-dims">' +
+        it.cells.map(c => '<span class="report-dim"><b>' + e(c.label) + ':</b> ' + (c.value ? e(c.value) : NA) + '</span>').join(' &nbsp; ') + '</div>';
+    }
+    if (it.t === 'note') return '<div class="report-detail">' + e(it.text).replace(/\n/g, '<br>') + '</div>';
+    if (it.t === 'photos') return this._photoGrid(it.ids);
+    if (it.t === 'na') return '<div class="report-detail report-na">' + e(it.text) + '</div>';
+    return '';
+  },
+
+  _blockHtml(bl) {
+    const e = v => this._esc(v);
+    if (bl.kind === 'heading') return '<h3 class="report-box-title">' + e(bl.text) + '</h3>';
+    const titleStyle = bl.sub ? ' style="font-size:13px;text-transform:none;letter-spacing:0;font-weight:600;border-bottom-width:1px;border-bottom-color:#bbbbbb;margin-left:12px;"' : '';
+    return '<div class="report-section"><div class="section-title"' + titleStyle + '>' + e(bl.title) + '</div>' +
+      bl.items.map(it => this._itemHtml(it)).join('') + '</div>';
+  },
+
+  render() {
+    const d = this.data;
+    if (!d) return;
+    const e = v => this._esc(v);
+    const m = this._model();
+
+    // Overall Result sits right under Supplier: teal highlight for Pass, red for Fail
+    const overallRow = m.result
+      ? '<tr><td colspan="4" style="background:' + (m.result.pass ? '#14b8a6' : '#e53935') + ';color:#ffffff;font-weight:700;font-size:15px;padding:10px 12px;border:none;width:auto;">' +
+        this._txt('总体结果', 'Overall Result') + ' : ' + m.result.label + '</td></tr>'
+      : '';
+    const sub = document.getElementById('reportSubtitle');
+    if (sub) sub.textContent = d.customer || '';
+
+    const info = m.info.map(r => '<tr><td>' + e(r[0]) + '</td><td>' + e(r[1]) + '</td><td>' + e(r[2]) + '</td><td>' + e(r[3]) + '</td></tr>').join('') +
+      '<tr><td>' + this._txt('供应商', 'Supplier') + '</td><td colspan="3">' + e(m.supplier) + '</td></tr>' + overallRow;
+
+    let body = '';
+    m.blocks.forEach(bl => { body += this._blockHtml(bl); });
+
+    document.getElementById('reportRoot').innerHTML =
       '<div class="report-header" style="display:block;text-align:center;">' +
         '<h1 style="margin:0 0 4px;font-size:26px;font-weight:400;color:var(--text-secondary);">' + this._txt('检验报告', 'Inspection Report') + '</h1>' +
-        '<h2 style="margin:0;font-size:22px;font-weight:600;color:var(--text-primary);">' + dash(d.customer) + '</h2>' +
+        '<h2 style="margin:0;font-size:22px;font-weight:600;color:var(--text-primary);">' + e(m.customer) + '</h2>' +
       '</div>' +
       '<table class="info-table">' + info + '</table>' +
-      '<div class="report-section"><div class="section-title">' + this._txt('尺寸测量', 'Measurements') + '</div></div>' + measureHtml +
-      looseHtml +
+      body +
       '<div class="report-footer"><span></span>' +
       '<span>' + e(this._dmyTime(Date.now()).slice(0, 10)) + '</span></div>';
-    this._updatePdfState();
+    this._updateExportState();
   },
 
   _fileName() {
     const d = this.data || {};
     const clean = s => String(s || '').replace(/[\\/:*?"<>|\s]+/g, '_').replace(/^_+|_+$/g, '');
     const parts = ['Inspection_Report', clean(d.customer), this._resultLabel(), clean(this._dmy(d.inspectionDate).replace(/\//g, '-'))].filter(Boolean);
-    return parts.join('_') + '.pdf';
+    return parts.join('_') + '.xlsx';
   },
 
+  /* ---- Excel export ---- */
 
-  // Layout px per PDF page, exactly as html2pdf will slice the canvas. html2pdf renders a container
-  // 190.0016mm wide (= 718.11 css px) and html2canvas rounds that up to 719 px, so the canvas is
-  // floor(719 * scale) px wide; it then cuts the canvas into floor(canvasWidth * innerHeight/innerWidth)
-  // px pieces. Pagination below must use this exact value: a guessed page height drifts a few px per
-  // page and lets photos straddle a page boundary on long reports.
-  _pdfPageHeight(scale) {
-    const ratio = (297.0000833 - 20) / (210.0015556 - 20);   // jsPDF A4 in mm, minus 10mm margins
-    const canvasW = Math.floor(Math.ceil((210.0015556 - 20) * 96 / 25.4) * scale);
-    return Math.floor(canvasW * ratio) / scale;
-  },
-
-  // Builds an off-screen, fixed-width copy of the report for PDF export and
-  // pre-paginates it: any block (a photo row, a heading with its first photo
-  // row, ...) that would straddle a page boundary is pushed down to the top of
-  // the next page, so photos are never cut in half. The canvas scale is chosen
-  // here too (from a fixed list) because the page height depends on it.
-  // Returns { el, wrap, height, width, scale }.
-  _buildPdfSource() {
-    const scales = [2, 1.75, 1.5, 1.25, 1, 0.85, 0.7, 0.6, 0.5];
-    let src = null;
-    for (let i = 0; i < scales.length; i++) {
-      if (src && src.wrap.parentNode) src.wrap.parentNode.removeChild(src.wrap);
-      src = this._buildPdfSourceAt(scales[i]);
-      // Keep the canvas inside what browsers can allocate (area and height limits)
-      if (src.width * src.height * scales[i] * scales[i] <= 14e6 && src.height * scales[i] <= 16000) break;
-    }
-    return src;
-  },
-
-  _buildPdfSourceAt(scale) {
-    const WIDTH = 718;                       // px, just inside the 190mm printable width (718.11px)
-    const PAGE_H = this._pdfPageHeight(scale);
-    const EDGE = 1;                          // px kept clear on each side of a page boundary (anti-aliasing)
-    const el = document.getElementById('reportRoot').cloneNode(true);
-    el.removeAttribute('id');
-    // The wrapper keeps the copy off-screen; the copy itself stays in normal flow
-    // because html2pdf clones its inline styles.
-    const wrap = document.createElement('div');
-    wrap.style.cssText = 'position:absolute;left:-99999px;top:0;width:' + WIDTH + 'px;';
-    el.style.cssText = 'width:' + WIDTH + 'px;max-width:none;margin:0;padding:0;background:#ffffff;';
-
-    // Photos in rows of three, one block per row (a grid can't be split between rows)
-    el.querySelectorAll('.report-photo-grid').forEach(grid => {
-      const items = Array.from(grid.children);
-      grid.innerHTML = '';
-      grid.style.display = 'block';
-      for (let i = 0; i < items.length; i += 3) {
-        const row = document.createElement('div');
-        row.className = 'report-photo-row';
-        row.style.cssText = 'display:flex;gap:8px;margin-bottom:8px;';
-        items.slice(i, i + 3).forEach(it => {
-          it.style.flex = '0 0 calc((100% - 16px) / 3)';
-          row.appendChild(it);
-        });
-        grid.appendChild(row);
-      }
+  // Photos are stored at camera size (several MB each). Scale them down to a long edge of
+  // 1280px before embedding so the workbook stays a sensible size while details stay checkable.
+  _shrinkPhoto(src) {
+    const MAX_EDGE = 1280;
+    return new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => {
+        const w0 = img.naturalWidth, h0 = img.naturalHeight;
+        if (!w0 || !h0) { resolve(null); return; }
+        try {
+          const k = Math.min(1, MAX_EDGE / Math.max(w0, h0));
+          const w = Math.max(1, Math.round(w0 * k)), h = Math.max(1, Math.round(h0 * k));
+          const cv = document.createElement('canvas');
+          cv.width = w; cv.height = h;
+          const cx = cv.getContext('2d');
+          cx.fillStyle = '#ffffff';
+          cx.fillRect(0, 0, w, h);
+          cx.drawImage(img, 0, 0, w, h);
+          resolve({ url: cv.toDataURL('image/jpeg', 0.85), ext: 'jpeg', w: w, h: h });
+        } catch (err) {
+          const mt = /^data:image\/(png|jpeg|jpg)/i.exec(src);
+          resolve(mt ? { url: src, ext: mt[1].toLowerCase() === 'png' ? 'png' : 'jpeg', w: w0, h: h0 } : null);
+        }
+      };
+      img.onerror = () => resolve(null);
+      img.src = src;
     });
-    wrap.appendChild(el);
-    document.body.appendChild(wrap);
+  },
 
-    const blocks = Array.from(el.querySelectorAll(
-      '.report-header, .info-table, .report-box-title, .section-title, .report-detail, .report-photo-row, .report-footer'));
-    const top0 = () => el.getBoundingClientRect().top;
-    const rect = b => { const r = b.getBoundingClientRect(), t0 = top0(); return { t: r.top - t0, b: r.bottom - t0 }; };
-    // Headings/measurements stay with whatever follows them
-    const keepNext = (b, next) => {
-      if (!next) return false;
-      const c = b.classList;
-      if (c.contains('report-box-title') || c.contains('section-title') || c.contains('report-dims')) return true;
-      return c.contains('report-detail') && next.classList.contains('report-photo-row');
+  async _buildWorkbook() {
+    const m = this._model();
+    const NA = 'Not Applicable';
+    const COLS = 12, COL_W = 9.7;
+    const COL_PX = Math.trunc(COL_W * 7 + 5);              // Excel's column width -> pixels
+    const EMU = 9525;                                       // EMU per pixel
+    const PER_ROW = 3, SPAN = COLS / PER_ROW;               // 3 photos per row, 4 columns each
+    const BOX_W = SPAN * COL_PX - 8, BOX_H = Math.round(BOX_W * 3 / 4);
+    const GREY = 'FF6B7280', LINE = 'FF9CA3AF';
+    const argb = hex => 'FF' + String(hex).replace('#', '').toUpperCase();
+
+    const wb = new ExcelJS.Workbook();
+    wb.created = new Date();
+    const ws = wb.addWorksheet(this._txt('检验报告', 'Inspection Report'), {
+      views: [{ showGridLines: false }],
+      pageSetup: { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0,
+        margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.3, footer: 0.3 } }
+    });
+    ws.columns = Array.from({ length: COLS }, () => ({ width: COL_W }));
+
+    let r = 0;
+    // One merged row (or a range inside it). Style is applied before merging so every merged cell shares it.
+    const put = (value, o) => {
+      o = o || {};
+      const row = ++r, c1 = o.c1 || 1, c2 = o.c2 || COLS;
+      const cell = ws.getCell(row, c1);
+      cell.value = value;
+      cell.font = Object.assign({ name: 'Calibri', size: 11 }, o.font || {});
+      cell.alignment = Object.assign({ vertical: 'middle', wrapText: true }, o.align || {});
+      if (o.fill) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: o.fill } };
+      if (o.border) cell.border = o.border;
+      if (c2 > c1) ws.mergeCells(row, c1, row, c2);
+      if (o.height) ws.getRow(row).height = o.height;
+      return row;
+    };
+    // Same row, another merged range (for the info table)
+    const putAt = (row, c1, c2, value, o) => {
+      o = o || {};
+      const cell = ws.getCell(row, c1);
+      cell.value = value;
+      cell.font = Object.assign({ name: 'Calibri', size: 11 }, o.font || {});
+      cell.alignment = Object.assign({ vertical: 'middle', wrapText: true }, o.align || {});
+      if (o.fill) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: o.fill } };
+      if (o.border) cell.border = o.border;
+      if (c2 > c1) ws.mergeCells(row, c1, row, c2);
+    };
+    const thin = { style: 'thin', color: { argb: 'FFD1D5DB' } };
+    const box = { top: thin, left: thin, bottom: thin, right: thin };
+    const spacer = h => { ++r; ws.getRow(r).height = h; };
+
+    // Title
+    put(this._txt('检验报告', 'Inspection Report'), { font: { size: 22, color: { argb: GREY } }, align: { horizontal: 'center', wrapText: false }, height: 34 });
+    put(m.customer, { font: { size: 18, bold: true }, align: { horizontal: 'center', wrapText: false }, height: 28 });
+    spacer(8);
+
+    // Info table: label | value | label | value
+    m.info.forEach(rw => {
+      const row = r + 1; r = row;
+      ws.getRow(row).height = 20;
+      putAt(row, 1, 2, rw[0], { font: { color: { argb: GREY } }, fill: 'FFF3F4F6', border: box });
+      putAt(row, 3, 6, rw[1], { border: box });
+      putAt(row, 7, 8, rw[2], { font: { color: { argb: GREY } }, fill: 'FFF3F4F6', border: box });
+      putAt(row, 9, 12, rw[3], { border: box });
+    });
+    { const row = ++r; ws.getRow(row).height = 20;
+      putAt(row, 1, 2, this._txt('供应商', 'Supplier'), { font: { color: { argb: GREY } }, fill: 'FFF3F4F6', border: box });
+      putAt(row, 3, 12, m.supplier, { border: box }); }
+    if (m.result) {
+      put(this._txt('总体结果', 'Overall Result') + ' : ' + m.result.label,
+        { font: { size: 14, bold: true, color: { argb: 'FFFFFFFF' } }, fill: argb(m.result.pass ? '#14b8a6' : '#e53935'), align: { horizontal: 'left', indent: 1 }, height: 28 });
+    }
+    spacer(10);
+
+    // Photos: shrink once per photo id, embed once per workbook
+    const embedded = {};
+    const getPhoto = async id => {
+      if (id in embedded) return embedded[id];
+      const src = this.imageMap[id];
+      const ph = src ? await this._shrinkPhoto(src) : null;
+      embedded[id] = ph ? { imageId: wb.addImage({ base64: ph.url, extension: ph.ext }), w: ph.w, h: ph.h } : null;
+      return embedded[id];
     };
 
-    for (let i = 0; i < blocks.length; i++) {
-      const b = blocks[i];
-      const r = rect(b);
-      let end = r.b, j = i;
-      while (keepNext(blocks[j], blocks[j + 1])) { j++; end = rect(blocks[j]).b; }
-      if (end - r.t >= PAGE_H - 2 * EDGE) end = r.b;   // chain taller than a page: protect the block only
-      const page = Math.floor((r.t + EDGE) / PAGE_H);
-      const boundary = (page + 1) * PAGE_H;
-      // The small "generated by" footer is dropped rather than printed alone on a new page
-      if (b.classList.contains('report-footer') && (r.t - page * PAGE_H < 60 || r.b > boundary - EDGE)) {
-        b.parentNode.removeChild(b);
+    for (const bl of m.blocks) {
+      if (bl.kind === 'heading') {
+        spacer(6);
+        put(bl.text, { font: { size: 14, bold: true }, fill: 'FFE5E7EB', align: { horizontal: 'left', indent: 1, wrapText: false }, height: 24 });
         continue;
       }
-      if (end > boundary - EDGE && r.t > page * PAGE_H + 2 * EDGE && r.b - r.t < PAGE_H - 2 * EDGE) {
-        const target = boundary + EDGE;                // first px of the next page, kept clear of the edge
-        const spacer = document.createElement('div');
-        spacer.style.cssText = 'height:' + Math.ceil(target - r.t) + 'px;';
-        b.parentNode.insertBefore(spacer, b);
-        for (let k = 0; k < 4; k++) {            // margin collapsing can leave it short: top up
-          const now = rect(b).t;
-          if (now >= target - 0.5) break;
-          spacer.style.height = (parseFloat(spacer.style.height) + Math.ceil(target - now)) + 'px';
+      // Section title with a rule underneath
+      const sub = bl.sub;
+      put(bl.title, {
+        font: { size: sub ? 11 : 12, bold: true },
+        align: { horizontal: 'left', indent: sub ? 2 : 0, wrapText: false },
+        border: { bottom: { style: sub ? 'hair' : 'thin', color: { argb: sub ? LINE : 'FF111827' } } },
+        height: 22
+      });
+      for (const it of bl.items) {
+        if (it.t === 'kv') {
+          if (it.badge) {
+            const row = ++r; ws.getRow(row).height = 22;
+            putAt(row, 1, 3, it.label + ':', { font: { bold: true } });
+            putAt(row, 4, 6, it.badge.text, { font: { bold: true, color: { argb: 'FFFFFFFF' } }, fill: argb(it.badge.color), align: { horizontal: 'center' } });
+          } else {
+            put({ richText: [{ font: { name: 'Calibri', size: 11, bold: true }, text: it.label + ': ' }, { font: { name: 'Calibri', size: 11 }, text: it.value || NA }] }, { height: 20 });
+          }
+        } else if (it.t === 'inlinekv') {
+          const rt = [];
+          it.cells.forEach((c, i) => {
+            rt.push({ font: { name: 'Calibri', size: 11, bold: true }, text: (i ? '      ' : '') + c.label + ': ' });
+            rt.push({ font: { name: 'Calibri', size: 11 }, text: c.value || NA });
+          });
+          put({ richText: rt }, { height: 20 });
+        } else if (it.t === 'note') {
+          const lines = String(it.text).split('\n').reduce((n, ln) => n + Math.max(1, Math.ceil(ln.length / 90)), 0);
+          put(it.text, { align: { vertical: 'top' }, height: Math.max(20, lines * 16) });
+        } else if (it.t === 'na') {
+          put(it.text, { font: { italic: true, color: { argb: GREY } }, height: 20 });
+        } else if (it.t === 'photos') {
+          for (let i = 0; i < it.ids.length; i += PER_ROW) {
+            const row = ++r;
+            ws.getRow(row).height = (BOX_H + 8) * 0.75;
+            const chunk = it.ids.slice(i, i + PER_ROW);
+            for (let k = 0; k < chunk.length; k++) {
+              const ph = await getPhoto(chunk[k]);
+              if (!ph) continue;
+              const sc = Math.min(BOX_W / ph.w, BOX_H / ph.h);
+              ws.addImage(ph.imageId, {
+                tl: { nativeCol: k * SPAN, nativeColOff: 4 * EMU, nativeRow: row - 1, nativeRowOff: 2 * EMU },
+                ext: { width: Math.round(ph.w * sc), height: Math.round(ph.h * sc) },
+                editAs: 'oneCell'
+              });
+            }
+          }
         }
       }
     }
-    // Trim trailing margins so they can't spill onto an empty extra page
-    const live = blocks.filter(x => el.contains(x));
-    const lastBottom = live.length ? rect(live[live.length - 1]).b : el.getBoundingClientRect().height;
-    el.style.height = Math.ceil(lastBottom) + 'px';
-    el.style.overflow = 'hidden';
-    return { el, wrap, height: Math.ceil(lastBottom), width: WIDTH, scale: scale };
+    spacer(8);
+    put(this._dmyTime(Date.now()).slice(0, 10), { font: { size: 9, color: { argb: GREY } }, align: { horizontal: 'right', wrapText: false } });
+
+    const buf = await wb.xlsx.writeBuffer();
+    return new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   },
 
-  async downloadPDF() {
+  async downloadXlsx() {
     if (this._busy || !this.data) return;
     if (!this._result()) {
       InspectionCore.Utils.toast(this._txt('请先选择 Pass / Fail', 'Choose Pass / Fail first'), 'error');
       return;
     }
-    if (typeof html2pdf === 'undefined') {
-      InspectionCore.Utils.toast(this._txt('PDF 组件未能加载，请刷新页面后重试', 'PDF library failed to load. Please reload the page and try again.'), 'error');
+    if (typeof ExcelJS === 'undefined') {
+      InspectionCore.Utils.toast(this._txt('Excel 组件未能加载，请刷新页面后重试', 'The Excel library failed to load. Please reload the page and try again.'), 'error');
       return;
     }
-    const btn = document.getElementById('downloadPdfBtn');
+    const btn = document.getElementById('downloadXlsxBtn');
     const label = btn && btn.querySelector('span');
     const original = label ? label.textContent : '';
     this._busy = true;
     if (btn) btn.disabled = true;
     if (label) label.textContent = this._txt('生成中...', 'Generating...');
-
-    let src = null;
     try {
-      src = this._buildPdfSource();
-      const scale = src.scale;
-      await html2pdf().set({
-        margin: [10, 10, 10, 10],
-        filename: this._fileName(),
-        image: { type: 'jpeg', quality: 0.92 },
-        html2canvas: { scale: scale, useCORS: true, backgroundColor: '#ffffff', scrollY: 0, scrollX: 0 },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: [] }   // pages are laid out by _buildPdfSource()
-      }).from(src.el).save();
-      InspectionCore.Utils.toast(this._txt('PDF 已生成', 'PDF downloaded'), 'success');
+      const blob = await this._buildWorkbook();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = this._fileName();
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+      InspectionCore.Utils.toast(this._txt('Excel 已生成', 'Excel downloaded'), 'success');
     } catch (err) {
-      console.error('[Report] PDF export failed:', err);
-      InspectionCore.Utils.toast(this._txt('PDF 生成失败', 'PDF export failed'), 'error');
+      console.error('[Report] Excel export failed:', err);
+      InspectionCore.Utils.toast(this._txt('Excel 生成失败', 'Excel export failed'), 'error');
     } finally {
-      if (src && src.wrap.parentNode) src.wrap.parentNode.removeChild(src.wrap);
       this._busy = false;
-      this._updatePdfState();
+      this._updateExportState();
       if (label) label.textContent = original;
     }
   }
