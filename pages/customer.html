@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#1a1a1a" />
 <title data-i18n="customer.title">Customer Portal</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E📋%3C/text%3E%3C/svg%3E" />
-<link rel="stylesheet" href="../assets/css/main.css?v=1792134569" />
+<link rel="stylesheet" href="../assets/css/main.css?v=1792137544" />
 <style>
 .cl-tabs{display:flex;gap:0;border-bottom:1px solid #333;margin-bottom:20px;overflow-x:auto;-webkit-overflow-scrolling:touch}
 .cl-tab{flex:1 1 auto;padding:10px 8px;background:none;border:none;border-bottom:2px solid transparent;color:#888;cursor:pointer;font-size:13px;white-space:nowrap}
@@ -74,9 +74,9 @@
   </div>
 </div>
 
-<script src="../assets/js/i18n.js?v=1792134569"></script>
-<script src="../assets/js/storage/storage-adapter.js?v=1792134569"></script>
-<script src="../assets/js/drive-provider.js?v=1792134569"></script>
+<script src="../assets/js/i18n.js?v=1792137544"></script>
+<script src="../assets/js/storage/storage-adapter.js?v=1792137544"></script>
+<script src="../assets/js/drive-provider.js?v=1792137544"></script>
 <script>
 let currentTab = 'psi';
 let allSessions = [];      // [{key, data, updatedAt}]
@@ -230,6 +230,9 @@ async function setResult(value) {
   render();
 }
 function openCurrentReport() { if (activeKey) openReport(activeKey); }
+
+// Drive sync found changes made by someone else (see assets/js/drive-provider.js): show them
+document.addEventListener('fatt:synced', function () { readSessions(); });
 
 document.querySelectorAll('.cl-tab').forEach(btn => {
   btn.addEventListener('click', () => { currentTab = btn.dataset.tab; render(); });
