@@ -1,14 +1,21 @@
 /* ============================================
    DRIVE-PROVIDER.JS - Optional Google Drive sync (TEST VERSION)
    ============================================
+   SETTINGS FOR THE COMPANY'S IT: the CONFIG block right below this comment is the only
+   part that needs editing (client ID, shared folder, access level).
    Nothing happens until someone presses "Connect Google Drive" on the landing page.
    Until then no request is made to Google and all data stays in this browser.
 
    - No key, secret or address is stored in this file. The OAuth client ID is typed in by
      the person who connects and is kept only in this browser (localStorage 'drivecfg_clientid').
    - Access token: sessionStorage only (this tab, about 1 hour), never localStorage.
-   - Scope: drive.file = this app can only see files it created itself.
-   - Files live in a Drive folder "FATT Inspection Sync":
+   - Access level (CONFIG.scope):
+       'drive'       can see folders shared with the person, so a whole team can work in ONE
+                     shared folder / shared drive. Use it for company sharing. The page can in
+                     theory read the person's whole Drive; this code only touches the sync folder.
+       'drive.file'  this app can only see files it created itself (nothing is shared between
+                     different accounts). Safest for a one-person test.
+   - Files live in a Drive folder (CONFIG.folderId, or else one named "FATT Inspection Sync"):
        session_<..>.json      one inspection {data, updatedAt}
        del_session_<..>.json  a deletion record {deletedAt}  (last write wins, see storage-adapter)
        img_<key>.txt          one photo (data URL)
@@ -24,8 +31,18 @@
   var CLIENT_KEY = 'drivecfg_clientid';
   var TOKEN_KEY = 'drivecfg_token';
   var FOLDER_KEY = 'drivecfg_folder';
-  var FOLDER_NAME = 'FATT Inspection Sync';
-  var SCOPE = 'https://www.googleapis.com/auth/drive.file';
+  // ---- CONFIG: edit this block (no secret belongs here; a client ID is public) ----
+  var CONFIG = {
+    clientId: '',                    // '' = ask the person once and remember it in this browser
+    folderId: '',                    // '' = look the folder up by name (shared-with-me first), create it if missing
+    folderName: 'FATT Inspection Sync',
+    scope: 'drive'                   // 'drive' (shared team folder) or 'drive.file' (own files only)
+  };
+  try { if (window.FATT_DRIVE_CONFIG) Object.keys(window.FATT_DRIVE_CONFIG).forEach(function (k) { CONFIG[k] = window.FATT_DRIVE_CONFIG[k]; }); } catch (e) {}
+  var FOLDER_NAME = CONFIG.folderName;
+  var SCOPE = 'https://www.googleapis.com/auth/' + (CONFIG.scope === 'drive.file' ? 'drive.file' : 'drive');
+  var ALL = 'supportsAllDrives=true'; // also works inside shared drives
+  var LIST = ALL + '&includeItemsFromAllDrives=true&corpora=allDrives';
   var API = 'https://www.googleapis.com/drive/v3/files';
   var UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
   var GSI = 'https://accounts.google.com/gsi/client';
@@ -74,12 +91,19 @@
     if (cached) return cached;
     if (!folderPromise) {
       folderPromise = (async function () {
+        if (CONFIG.folderId) return CONFIG.folderId;
         var qs = "name='" + q(FOLDER_NAME) + "' and mimeType='application/vnd.google-apps.folder' and trashed=false";
-        var r = await api(API + '?q=' + encodeURIComponent(qs) + '&fields=files(id)&pageSize=1&spaces=drive');
+        var r = await api(API + '?q=' + encodeURIComponent(qs) + '&fields=files(id,ownedByMe,createdTime)&pageSize=50&' + LIST);
         var j = await r.json();
-        if (j.files && j.files.length) return j.files[0].id;
+        // A folder someone shared with this person wins over one they own (so a teammate does not
+        // end up in a private duplicate); among equals the oldest wins, so everybody picks the same.
+        var found = (j.files || []).slice().sort(function (a, b) {
+          if (!!a.ownedByMe !== !!b.ownedByMe) return a.ownedByMe ? 1 : -1;
+          return String(a.createdTime || '').localeCompare(String(b.createdTime || '')) || String(a.id).localeCompare(String(b.id));
+        });
+        if (found.length) return found[0].id;
         if (!create) return null;
-        var c = await api(API + '?fields=id', {
+        var c = await api(API + '?fields=id&' + ALL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' })
@@ -95,7 +119,7 @@
   async function findFile(name, fid) {
     if (idx[name]) return idx[name];
     var qs = "name='" + q(name) + "' and '" + fid + "' in parents and trashed=false";
-    var r = await api(API + '?q=' + encodeURIComponent(qs) + '&fields=files(id)&pageSize=1');
+    var r = await api(API + '?q=' + encodeURIComponent(qs) + '&fields=files(id)&pageSize=1&' + LIST);
     var j = await r.json();
     if (j.files && j.files.length) { idx[name] = j.files[0].id; return idx[name]; }
     return null;
@@ -117,14 +141,14 @@
     var fid = await folderId(true);
     var id = await findFile(name, fid);
     if (id) {
-      await api(UPLOAD + '/' + id + '?uploadType=media', { method: 'PATCH', headers: { 'Content-Type': mime }, body: text });
+      await api(UPLOAD + '/' + id + '?uploadType=media&' + ALL, { method: 'PATCH', headers: { 'Content-Type': mime }, body: text });
       return;
     }
     var b = 'fatt' + Math.random().toString(36).slice(2);
     var body = '--' + b + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' +
       JSON.stringify({ name: name, parents: [fid] }) +
       '\r\n--' + b + '\r\nContent-Type: ' + mime + '\r\n\r\n' + text + '\r\n--' + b + '--';
-    var r = await api(UPLOAD + '?uploadType=multipart&fields=id', {
+    var r = await api(UPLOAD + '?uploadType=multipart&fields=id&' + ALL, {
       method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + b }, body: body
     });
     idx[name] = (await r.json()).id;
@@ -137,7 +161,7 @@
     if (!fid) return;
     var id = await findFile(name, fid);
     if (!id) return;
-    await api(API + '/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ trashed: true }) });
+    await api(API + '/' + id + '?' + ALL, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ trashed: true }) });
     delete idx[name];
   }
 
@@ -147,7 +171,7 @@
     var out = [], token = '';
     do {
       var qs = "'" + fid + "' in parents and trashed=false";
-      var r = await api(API + '?q=' + encodeURIComponent(qs) + '&fields=nextPageToken,files(id,name)&pageSize=1000' + (token ? '&pageToken=' + encodeURIComponent(token) : ''));
+      var r = await api(API + '?q=' + encodeURIComponent(qs) + '&fields=nextPageToken,files(id,name)&pageSize=1000&' + LIST + (token ? '&pageToken=' + encodeURIComponent(token) : ''));
       var j = await r.json();
       out = out.concat(j.files || []);
       token = j.nextPageToken || '';
@@ -198,7 +222,7 @@
       var files = await listAll(fid);
       idx = {};
       files.forEach(function (f) { idx[f.name] = f.id; });
-      var read = async function (id) { return (await api(API + '/' + id + '?alt=media')).text(); };
+      var read = async function (id) { return (await api(API + '/' + id + '?alt=media&' + ALL)).text(); };
       var jobs = [];
       files.forEach(function (f) {
         var m;
@@ -254,7 +278,7 @@
   }
 
   async function connect() {
-    var cid = lsGet(CLIENT_KEY);
+    var cid = CONFIG.clientId || lsGet(CLIENT_KEY);
     if (!cid) {
       cid = (window.prompt(L('请输入 Google OAuth 客户端 ID（xxx.apps.googleusercontent.com）。只保存在这个浏览器里。',
                               'Enter your Google OAuth client ID (xxx.apps.googleusercontent.com). Stored in this browser only.')) || '').trim();
@@ -297,7 +321,7 @@
     if (!b) return;
     var connected = !!getToken();
     b.textContent = connected ? L('断开 Drive', 'Disconnect Drive')
-      : (lsGet(CLIENT_KEY) ? L('重新连接 Drive', 'Reconnect Drive') : L('连接 Google Drive', 'Connect Google Drive'));
+      : ((CONFIG.clientId || lsGet(CLIENT_KEY)) ? L('重新连接 Drive', 'Reconnect Drive') : L('连接 Google Drive', 'Connect Google Drive'));
     b.onclick = connected ? disconnect : connect;
   }
 
