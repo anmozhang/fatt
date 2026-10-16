@@ -6,8 +6,8 @@
 <meta name="theme-color" content="#1a1a1a" />
 <title data-i18n="role.bteam.name">Get Start</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E📸%3C/text%3E%3C/svg%3E" />
-<link rel="stylesheet" href="../assets/css/main.css?v=1792137544" />
-<link rel="stylesheet" href="../assets/css/bteam.css?v=1792137544" />
+<link rel="stylesheet" href="../assets/css/main.css?v=1792138771" />
+<link rel="stylesheet" href="../assets/css/bteam.css?v=1792138771" />
 </head>
 <body class="theme-light">
 
@@ -129,10 +129,10 @@
 
 </div>
 
-<script src="../assets/js/i18n.js?v=1792137544"></script>
-<script src="../assets/js/storage/storage-adapter.js?v=1792137544"></script>
-<script src="../assets/js/drive-provider.js?v=1792137544"></script>
-<script src="../assets/js/lightbox.js?v=1792137544"></script>
+<script src="../assets/js/i18n.js?v=1792138771"></script>
+<script src="../assets/js/storage/storage-adapter.js?v=1792138771"></script>
+<script src="../assets/js/drive-provider.js?v=1792138771"></script>
+<script src="../assets/js/lightbox.js?v=1792138771"></script>
 <script>
 const STEPS = [
   { key: 'setup', i18n: 'bteam.step.setup', label: '基本信息' },
@@ -189,6 +189,7 @@ const BOX_WEIGHT = { key: 'carton_weight', zh: '重量 (Weight)', en: 'Weight', 
 const BTeam = {
   currentStep: 0,
   listMode: false,
+  _gate: false,
   sessionId: null,
   sessionData: {},
   _expandedBoxes: new Set(),
@@ -208,6 +209,7 @@ const BTeam = {
         // Category names on the measurements step are built per language at
         // render time, so rebuild that step (its inputs save on every keystroke).
         if (this.listMode) this._renderHome();
+        else if (this._gate) this._renderGate();
         else if (this.currentStep === 2) this._renderStepContent(2);
       }, 0));
     });
@@ -228,6 +230,9 @@ const BTeam = {
     if (resumeId) localStorage.setItem('fatt_current_session', resumeId);
     let resumed = false;
     if (!wantList) {
+      // Coming from Customer List -> Pending: start from the newest Drive copy.
+      // (A plain reload mid-inspection has no ?resume= and never pulls.)
+      if (resumeId) await this._pullIfDrive();
       resumed = await this._checkExistingSession();
       if (resumed) this._cleanUrl();
     }
@@ -260,11 +265,60 @@ const BTeam = {
       .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   },
 
+  // ----- Google Drive (optional): pull before deciding what to show -----
+  _driveOn() {
+    return !!(window.FATT_DRIVE && FATT_DRIVE.enabled());
+  },
+  _driveOff() {          // Drive is switched on for this browser but the sign-in is gone
+    return this._driveOn() && !FATT_DRIVE.signedIn();
+  },
+  _renderSyncing() {
+    const t = FATT_DRIVE.text();
+    this._gate = false;
+    document.getElementById('stepContent').innerHTML =
+      '<div id="driveSyncing" style="text-align:center;padding:48px 16px;color:var(--text-muted,#6b7280);">' + this._esc(t.syncing) + '</div>';
+  },
+  // Wait (max 3s) for the latest Drive copy; never blocks longer than that.
+  async _pullIfDrive() {
+    if (!this._driveOn()) return null;
+    this._renderSyncing();
+    return FATT_DRIVE.pullNow(3000);
+  },
+  _renderGate() {
+    const t = FATT_DRIVE.text();
+    this._gate = true;
+    this.listMode = false;
+    this._setChrome(false);
+    document.getElementById('stepContent').innerHTML = `
+      <div id="driveGate" class="card" style="text-align:center;padding:28px 18px;">
+        <div style="font-size:18px;font-weight:600;margin-bottom:8px;">${this._esc(t.title)}</div>
+        <div style="margin-bottom:18px;line-height:1.5;">${this._esc(t.body)}</div>
+        <button id="gateConnect" class="btn btn-primary w-full" style="margin-bottom:10px;" onclick="BTeam._driveConnect()">${this._esc(t.connect)}</button>
+        <button id="gateSkip" class="btn w-full" onclick="BTeam.startNew()">${this._esc(t.skip)}</button>
+      </div>`;
+  },
+  async _driveConnect() {
+    let ok = false;
+    try { ok = await FATT_DRIVE.connect(); } catch (e) { ok = false; }
+    if (ok) await this.showHome({ noPull: true });   // connect() already pulled
+  },
+
   // Get Start home: every unfinished file + "Start New Inspection".
-  // With no unfinished files it goes straight to a blank form.
-  async showHome() {
+  // With Drive on, the latest remote copy is pulled first, so a fresh device
+  // sees the team's drafts. With no unfinished files it goes straight to a
+  // blank form (or, if Drive is on but signed out, to the connect prompt).
+  async showHome(opts) {
+    if (this._driveOn() && !(opts && opts.noPull)) {
+      this._setChrome(false);
+      await this._pullIfDrive();
+    }
     const drafts = await this._loadDrafts();
-    if (drafts.length === 0) { await this.startNew(); return; }
+    if (drafts.length === 0) {
+      if (this._driveOff()) { this._renderGate(); return; }
+      await this.startNew();
+      return;
+    }
+    this._gate = false;
     this.listMode = true;
     this.sessionId = null;
     this.sessionData = {};
@@ -276,7 +330,15 @@ const BTeam = {
   async _renderHome(drafts) {
     drafts = drafts || await this._loadDrafts();
     const panel = this._draftsHtml(drafts);
+    let banner = '';
+    if (this._driveOff()) {
+      const t = FATT_DRIVE.text();
+      banner = `<div id="driveBanner" class="card" style="margin-bottom:12px;padding:12px 14px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;">
+        <span style="flex:1 1 180px;">${this._esc(t.banner)}</span>
+        <button class="btn btn-primary" onclick="BTeam._driveConnect()">${this._esc(t.connect)}</button></div>`;
+    }
     document.getElementById('stepContent').innerHTML = `
+      ${banner}
       ${panel}
       <button class="btn btn-primary w-full" style="margin-top:4px;" onclick="BTeam.startNew()" data-i18n="bteam.start_new">开始新检验</button>`;
     if (window.I18n) I18n.apply();
@@ -284,6 +346,7 @@ const BTeam = {
 
   // Blank form for a brand-new file; the existing drafts are left untouched.
   async startNew() {
+    this._gate = false;
     this.listMode = false;
     this.sessionId = null;
     this.sessionData = {};
@@ -398,8 +461,9 @@ const BTeam = {
     this.listMode = false;
     this._cleanUrl();
     this._setChrome(true);
+    await this._pullIfDrive();      // open the newest Drive copy (max 3s)
     const ok = await this._checkExistingSession();
-    if (!ok) await this.showHome();
+    if (!ok) await this.showHome({ noPull: true });
   },
 
   _esc(str) {
