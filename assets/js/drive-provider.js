@@ -487,32 +487,35 @@
     render();
   }
 
-  async function connect() {
-    var cid = CONFIG.clientId || lsGet(CLIENT_KEY);
-    if (!cid) {
-      cid = (window.prompt(L('请输入 Google OAuth 客户端 ID（xxx.apps.googleusercontent.com）。只保存在这个浏览器里。',
-                              'Enter your Google OAuth client ID (xxx.apps.googleusercontent.com). Stored in this browser only.')) || '').trim();
-      if (!cid) return;
-      if (!/^[\w.-]+\.apps\.googleusercontent\.com$/.test(cid)) { note(L('客户端 ID 格式不对', 'Client ID format looks wrong'), true); return; }
-      lsSet(CLIENT_KEY, cid);
-    }
-    try { await loadGsi(); }
-    catch (e) { note(L('无法加载 Google 登录脚本', 'Could not load Google sign-in'), true); return; }
-    var tc = google.accounts.oauth2.initTokenClient({
-      client_id: cid,
-      scope: SCOPE,
-      callback: function (resp) {
-        if (!resp || resp.error || !resp.access_token) { note(L('登录失败：', 'Sign-in failed: ') + ((resp && resp.error) || ''), true); return; }
-        storeToken(resp);
-        st.silentFails = 0;
-        folderPromise = null; ssDel(FOLDER_KEY); idx = {}; pullCache = {};
-        afterConnect();
-      },
-      error_callback: function (err) { note(L('登录已取消或被拦截', 'Sign-in cancelled or blocked') + (err && err.type ? ' (' + err.type + ')' : ''), true); }
+  // Resolves true once signed in and the first sync finished, false if cancelled / failed
+  function connect() {
+    return new Promise(function (resolve) {
+      var cid = CONFIG.clientId || lsGet(CLIENT_KEY);
+      if (!cid) {
+        cid = (window.prompt(L('请输入 Google OAuth 客户端 ID（xxx.apps.googleusercontent.com）。只保存在这个浏览器里。',
+                                'Enter your Google OAuth client ID (xxx.apps.googleusercontent.com). Stored in this browser only.')) || '').trim();
+        if (!cid) return resolve(false);
+        if (!/^[\w.-]+\.apps\.googleusercontent\.com$/.test(cid)) { note(L('客户端 ID 格式不对', 'Client ID format looks wrong'), true); return resolve(false); }
+        lsSet(CLIENT_KEY, cid);
+      }
+      loadGsi().then(function () {
+        var tc = google.accounts.oauth2.initTokenClient({
+          client_id: cid,
+          scope: SCOPE,
+          callback: function (resp) {
+            if (!resp || resp.error || !resp.access_token) { note(L('登录失败：', 'Sign-in failed: ') + ((resp && resp.error) || ''), true); return resolve(false); }
+            storeToken(resp);
+            st.silentFails = 0;
+            folderPromise = null; ssDel(FOLDER_KEY); idx = {}; pullCache = {};
+            afterConnect().then(function () { resolve(true); }, function () { resolve(true); });
+          },
+          error_callback: function (err) { note(L('登录已取消或被拦截', 'Sign-in cancelled or blocked') + (err && err.type ? ' (' + err.type + ')' : ''), true); resolve(false); }
+        });
+        var opts = { prompt: '' };
+        if (lsGet(HINT_KEY)) opts.hint = lsGet(HINT_KEY);
+        tc.requestAccessToken(opts);
+      }, function () { note(L('无法加载 Google 登录脚本', 'Could not load Google sign-in'), true); resolve(false); });
     });
-    var opts = { prompt: '' };
-    if (lsGet(HINT_KEY)) opts.hint = lsGet(HINT_KEY);
-    tc.requestAccessToken(opts);
   }
 
   async function disconnect() {
@@ -540,6 +543,35 @@
       : ((CONFIG.clientId || lsGet(CLIENT_KEY)) ? L('重新连接 Drive', 'Reconnect Drive') : L('连接 Google Drive', 'Connect Google Drive'));
     b.onclick = connected ? disconnect : connect;
   }
+
+  // Small API for pages (Get Start uses it to look at Drive before deciding what to show)
+  window.FATT_DRIVE = {
+    enabled: function () { return !!(typeof StorageAdapter !== 'undefined' && enabled()); },
+    signedIn: function () { return !!getToken(); },
+    connect: connect,
+    // Pull from Drive now, waiting at most `ms`. state: off | synced | expired | timeout | error
+    pullNow: function (ms) {
+      if (!enabled()) return Promise.resolve({ state: 'off' });
+      var limit = new Promise(function (r) { setTimeout(function () { r({ state: 'timeout' }); }, ms || 3000); });
+      var work = (async function () {
+        if (!getToken()) await trySilent();
+        if (!getToken()) return { state: 'expired' };
+        var r = await syncAndNotify();
+        return r && r.ok ? { state: 'synced', result: r } : { state: 'error' };
+      })().catch(function () { return { state: 'error' }; });
+      return Promise.race([work, limit]);
+    },
+    text: function () {
+      return {
+        syncing: L('正在从 Drive 同步…', 'Syncing from Drive…'),
+        title: L('Drive 未连接', 'Drive not connected'),
+        body: L('先连接 Drive，才能看到同事的草稿；也可以先跳过，直接新建检验。', 'Connect Drive to see your team\'s drafts, or skip and start a new inspection.'),
+        banner: L('Drive 未连接，下面的列表可能不是最新的。', 'Drive is not connected - this list may be out of date.'),
+        connect: L('连接 Drive', 'Connect Drive'),
+        skip: L('跳过，直接新建', 'Skip, start new')
+      };
+    }
+  };
 
   function initUi() {
     var info = document.getElementById('storageInfo');
